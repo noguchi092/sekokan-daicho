@@ -12,6 +12,7 @@ async function getPdfJs(){
   })().catch(error=>{pdfjsPromise=null;throw error});
   return pdfjsPromise;
 }
+export {getPdfJs as loadPdfEngine};
 export async function cropPdfDiagram(file){
   if(!file||!(file.type==='application/pdf'||/\.pdf$/i.test(file.name)))throw Error('PDFファイルを選択してください');
   if(file.size>80*1024*1024)throw Error('80MB以下のPDFを選択してください');
