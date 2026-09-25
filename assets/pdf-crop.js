@@ -34,7 +34,6 @@ export async function cropPdfDiagram(file){
       try{const page=await pdf.getPage(pageNumber);const base=page.getViewport({scale:1});const scale=Math.min(900/base.width*Number(zoomInput.value),4800/Math.max(base.width,base.height));const viewport=page.getViewport({scale});canvas.width=Math.floor(viewport.width);canvas.height=Math.floor(viewport.height);const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);renderTask=page.render({canvas,canvasContext:ctx,viewport});await renderTask.promise;message.textContent='範囲を選択してください';overlay.querySelector('.pdf-page-info').textContent=`${pageNumber} / ${pdf.numPages} ページ`}
       catch(error){if(!closed)message.textContent='このページを表示できませんでした'}
       finally{busy=false;if(!closed){previous.disabled=pageNumber<=1;next.disabled=pageNumber>=pdf.numPages;zoomInput.disabled=false}}}
-    }
     canvas.onpointerdown=event=>{if(busy)return;event.preventDefault();start=position(event);canvas.setPointerCapture(event.pointerId);setArea(null)};
     canvas.onpointermove=event=>{if(!start)return;let end=position(event),a={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),width:Math.abs(end.x-start.x),height:Math.abs(end.y-start.y)};setArea(a.width>=8&&a.height>=8?a:null)};
     canvas.onpointerup=event=>{if(!start)return;let end=position(event),a={x:Math.min(start.x,end.x),y:Math.min(start.y,end.y),width:Math.abs(end.x-start.x),height:Math.abs(end.y-start.y)};start=null;setArea(a.width>=12&&a.height>=12?a:null);message.textContent=area?'選択範囲を確認して登録してください':'少し広い範囲を選択してください'};
