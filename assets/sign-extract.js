@@ -1,0 +1,47 @@
+import {loadPdfEngine} from './pdf-crop.js?v=7';
+
+export async function extractDrawingSigns(file,prefixText,onProgress=()=>{}){
+  if(!file||!(file.type==='application/pdf'||/\.pdf$/i.test(file.name)))throw Error('PDFファイルを選択してください');
+  if(file.size>80*1024*1024)throw Error('80MB以下のPDFを選択してください');
+  const prefixes=[...new Set(prefixText.normalize('NFKC').toUpperCase().split(/[,，、\s]+/).map(x=>x.trim()).filter(x=>/^[A-Z]{1,4}$/.test(x)))].sort((a,b)=>b.length-a.length);
+  if(!prefixes.length)throw Error('符号の先頭文字を入力してください（例：G,C,W）');
+  const pdfjs=await loadPdfEngine();
+  const task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())});
+  let pdf;
+  try{pdf=await task.promise}
+  catch(error){await task.destroy();throw Error(error?.name==='PasswordException'?'パスワード付きPDFは開けません':'PDFを読み込めませんでした')}
+  let textPages=0,found=new Map();
+  const regex=new RegExp(`(?<![A-Z0-9])(?:${prefixes.join('|')})[\\s－-]*\\d{1,4}(?:[－-][A-Z0-9]{1,3})?(?![A-Z0-9])`,'g');
+  try{
+    for(let n=1;n<=pdf.numPages;n++){
+      onProgress(`${n} / ${pdf.numPages} ページを確認中…`);
+      const page=await pdf.getPage(n),text=await page.getTextContent();
+      const items=text.items.filter(x=>typeof x.str==='string'&&x.str.trim());
+      if(items.length)textPages++;
+      const lines=new Map();
+      for(const item of items){
+        const y=Math.round((item.transform?.[5]||0)/3),x=item.transform?.[4]||0;
+        if(!lines.has(y))lines.set(y,[]);
+        lines.get(y).push({str:item.str.normalize('NFKC').toUpperCase(),x,width:item.width||0,height:item.height||10});
+      }
+      for(const line of lines.values()){
+        line.sort((a,b)=>a.x-b.x);
+        let phrase='',previous=null;
+        for(const part of line){
+          if(previous&&part.x-(previous.x+previous.width)>Math.max(5,part.height*.45))phrase+=' ';
+          phrase+=part.str;
+          previous=part;
+        }
+        for(const match of phrase.matchAll(regex)){
+          const code=match[0].replace(/[\s－]/g,'').replace(/--+/g,'-');
+          let row=found.get(code);
+          if(!row){row={code,pages:[],count:0};found.set(code,row)}
+          row.count++;
+          if(!row.pages.includes(n))row.pages.push(n);
+        }
+      }
+    }
+    const rows=[...found.values()].sort((a,b)=>a.code.localeCompare(b.code,'ja',{numeric:true}));
+    return {rows,pageCount:pdf.numPages,textPages};
+  }finally{await task.destroy()}
+}
