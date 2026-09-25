@@ -1,9 +1,15 @@
-const PDFJS_VERSION='5.6.205';
-const PDFJS_URL=`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.min.mjs`;
-const PDFJS_WORKER=`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build/pdf.worker.min.mjs`;
 let pdfjsPromise;
 async function getPdfJs(){
-  pdfjsPromise ||= import(PDFJS_URL).then(pdfjs=>{pdfjs.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;return pdfjs}).catch(error=>{pdfjsPromise=null;throw error});
+  pdfjsPromise ||= (async()=>{
+    const pdfjs=await import('./vendor/pdf.min.mjs');
+    const parts=await Promise.all([1,2,3,4].map(async n=>{
+      const response=await fetch(new URL(`./vendor/pdf.worker.part${n}.txt`,import.meta.url));
+      if(!response.ok)throw Error('PDFの描画ファイルを読み込めません');
+      return response.text();
+    }));
+    pdfjs.GlobalWorkerOptions.workerSrc=URL.createObjectURL(new Blob(parts,{type:'text/javascript'}));
+    return pdfjs;
+  })().catch(error=>{pdfjsPromise=null;throw error});
   return pdfjsPromise;
 }
 export async function cropPdfDiagram(file){
