@@ -16,7 +16,7 @@ export async function cropPdfDiagram(file){
   if(!file||!(file.type==='application/pdf'||/\.pdf$/i.test(file.name)))throw Error('PDFファイルを選択してください');
   if(file.size>80*1024*1024)throw Error('80MB以下のPDFを選択してください');
   let pdfjs;
-  try{pdfjs=await getPdfJs()}catch{throw Error('PDF表示機能を読み込めませんでした。通信環境を確認してください')}
+  try{pdfjs=await getPdfJs()}catch(error){throw Error(`PDF表示機能を読み込めませんでした：${error.message||'通信環境を確認してください'}`)}
   let task,pdf;
   try{task=pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())});pdf=await task.promise}
   catch(error){await task?.destroy();throw Error(error?.name==='PasswordException'?'パスワード付きPDFは開けません':'PDFを開けませんでした。ファイルを確認してください')}
