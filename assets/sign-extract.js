@@ -1,6 +1,6 @@
 import {loadPdfEngine} from './pdf-crop.js?v=7';
 
-export async function extractDrawingSigns(file,prefixText,onProgress=()=>{}){
+export async function extractDrawingSigns(file,prefixText,onProgress=()=>{},ocrMode='auto'){
   if(!file||!(file.type==='application/pdf'||/\.pdf$/i.test(file.name)))throw Error('PDFファイルを選択してください');
   if(file.size>80*1024*1024)throw Error('80MB以下のPDFを選択してください');
   const prefixes=[...new Set(prefixText.normalize('NFKC').toUpperCase().split(/[,，、\s]+/).map(x=>x.trim()).filter(x=>/^[A-Z]{1,4}$/.test(x)))].sort((a,b)=>b.length-a.length);
@@ -10,8 +10,17 @@ export async function extractDrawingSigns(file,prefixText,onProgress=()=>{}){
   let pdf;
   try{pdf=await task.promise}
   catch(error){await task.destroy();throw Error(error?.name==='PasswordException'?'パスワード付きPDFは開けません':'PDFを読み込めませんでした')}
-  let textPages=0,found=new Map();
+  let textPages=0,ocrPages=0,found=new Map(),ocrWorker;
   const regex=new RegExp(`(?<![A-Z0-9])(?:${prefixes.join('|')})[\\s－-]*\\d{1,4}(?:[－-][A-Z0-9]{1,3})?(?![A-Z0-9])`,'g');
+  function addMatches(phrase,n){
+    for(const match of phrase.normalize('NFKC').toUpperCase().matchAll(regex)){
+      const code=match[0].replace(/[\s－]/g,'').replace(/--+/g,'-');
+      let row=found.get(code);
+      if(!row){row={code,pages:[],count:0};found.set(code,row)}
+      row.count++;
+      if(!row.pages.includes(n))row.pages.push(n);
+    }
+  }
   try{
     for(let n=1;n<=pdf.numPages;n++){
       onProgress(`${n} / ${pdf.numPages} ページを確認中…`);
@@ -24,6 +33,7 @@ export async function extractDrawingSigns(file,prefixText,onProgress=()=>{}){
         if(!lines.has(y))lines.set(y,[]);
         lines.get(y).push({str:item.str.normalize('NFKC').toUpperCase(),x,width:item.width||0,height:item.height||10});
       }
+      const countBefore=[...found.values()].reduce((sum,row)=>sum+row.count,0);
       for(const line of lines.values()){
         line.sort((a,b)=>a.x-b.x);
         let phrase='',previous=null;
@@ -32,16 +42,22 @@ export async function extractDrawingSigns(file,prefixText,onProgress=()=>{}){
           phrase+=part.str;
           previous=part;
         }
-        for(const match of phrase.matchAll(regex)){
-          const code=match[0].replace(/[\s－]/g,'').replace(/--+/g,'-');
-          let row=found.get(code);
-          if(!row){row={code,pages:[],count:0};found.set(code,row)}
-          row.count++;
-          if(!row.pages.includes(n))row.pages.push(n);
-        }
+        addMatches(phrase,n);
+      }
+      if(ocrMode==='all'||(ocrMode==='auto'&&countBefore===[...found.values()].reduce((sum,row)=>sum+row.count,0))){
+        if(!ocrWorker){const {createOcr}=await import('./ocr-engine.js');ocrWorker=await createOcr(onProgress)}
+        onProgress(`${n} / ${pdf.numPages} ページをOCRで確認中…`);
+        const viewport=page.getViewport({scale:Math.min(3,2200/page.getViewport({scale:1}).width)});
+        const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+        const context=canvas.getContext('2d',{willReadFrequently:true});
+        try{
+          await page.render({canvasContext:context,canvas,viewport}).promise;
+          const result=await ocrWorker.recognize(canvas);
+          addMatches(result.data.text,n);ocrPages++;
+        }finally{canvas.width=0;canvas.height=0}
       }
     }
     const rows=[...found.values()].sort((a,b)=>a.code.localeCompare(b.code,'ja',{numeric:true}));
-    return {rows,pageCount:pdf.numPages,textPages};
-  }finally{await task.destroy()}
+    return {rows,pageCount:pdf.numPages,textPages,ocrPages};
+  }finally{if(ocrWorker)await ocrWorker.terminate();await task.destroy()}
 }
