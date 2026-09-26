@@ -10,7 +10,7 @@ export async function createOcr(onProgress=()=>{}){
         if(message.status==='recognizing text')onProgress(`OCR解析中… ${Math.round(message.progress*100)}%`);
       }
     });
-    await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- '});
+    await worker.setParameters({tessedit_char_whitelist:'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ',tessedit_pageseg_mode:'11'});
     return worker;
   }catch(error){throw Error(`OCRの認識ファイルを準備できませんでした：${error?.message||'通信環境を確認してください'}`)}
 }
