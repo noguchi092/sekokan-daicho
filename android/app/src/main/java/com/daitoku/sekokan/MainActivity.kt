@@ -12,11 +12,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
+import androidx.camera.core.UseCaseGroup
+import androidx.camera.core.ViewPort
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,14 +32,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import android.util.Rational
 import java.io.File
 import java.util.concurrent.Executors
+import kotlin.math.roundToInt
 
 private val ink = Color(0xFF123C3E)
 private val green = Color(0xFF0B5B3D)
@@ -230,33 +239,72 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
     val providerFuture = remember { ProcessCameraProvider.getInstance(context) }
     val worker = remember { Executors.newSingleThreadExecutor() }
     var busy by remember { mutableStateOf(false) }
+    var boardLeft by remember(board?.id) { mutableFloatStateOf(.385f) }
+    var boardTop by remember(board?.id) { mutableFloatStateOf(.55f) }
+    var boardHeightFraction by remember(board?.id) { mutableFloatStateOf(.25f) }
     DisposableEffect(Unit) {
         val oldFlags = activity.window.decorView.systemUiVisibility
         activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
         onDispose { activity.window.decorView.systemUiVisibility = oldFlags; if (providerFuture.isDone) providerFuture.get().unbindAll(); worker.shutdown() }
     }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(factory = { ctx ->
             PreviewView(ctx).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER
-                providerFuture.addListener({
+                val previewView = this
+                var bound = false
+                fun bindWhenReady() {
+                    if (bound || width == 0 || height == 0 || !providerFuture.isDone) return
                     try {
                         val provider = providerFuture.get()
+                        val viewport = previewView.viewPort ?: ViewPort.Builder(
+                            Rational(width, height), previewView.display?.rotation ?: 0
+                        ).setScaleType(ViewPort.FILL_CENTER).build()
                         provider.unbindAll()
                         val preview = Preview.Builder().build().also { it.surfaceProvider = surfaceProvider }
-                        provider.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, preview, capture)
+                        val group = UseCaseGroup.Builder().setViewPort(viewport)
+                            .addUseCase(preview).addUseCase(capture).build()
+                        provider.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, group)
+                        bound = true
                     } catch (e: Exception) { onError("カメラを起動できません: ${e.message}"); onBack() }
+                }
+                addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> bindWhenReady() }
+                providerFuture.addListener({
+                    previewView.post { bindWhenReady() }
                 }, ContextCompat.getMainExecutor(ctx))
             }
         }, modifier = Modifier.fillMaxSize())
         if (board != null) {
-            Column(Modifier.align(Alignment.BottomEnd).padding(end = 18.dp, bottom = 110.dp).fillMaxWidth(.59f).background(green, RoundedCornerShape(5.dp)).padding(7.dp)) {
+            val boardWidth = maxWidth * .58f
+            val boardHeight = (boardWidth * .68f).coerceAtMost(maxHeight * .42f)
+            val heightFraction = if (maxHeight.value > 0f) {
+                (boardHeight.value / maxHeight.value).coerceIn(0f, 1f)
+            } else .25f
+            val density = LocalDensity.current
+            val screenWidthPx = with(density) { maxWidth.toPx() }
+            val screenHeightPx = with(density) { maxHeight.toPx() }
+            SideEffect { boardHeightFraction = heightFraction }
+            Column(Modifier.align(Alignment.TopStart)
+                .offset { IntOffset((boardLeft.coerceIn(0f, .42f) * screenWidthPx).roundToInt(),
+                    (boardTop.coerceIn(0f, 1f - heightFraction) * screenHeightPx).roundToInt()) }
+                .width(boardWidth).height(boardHeight)
+                .pointerInput(board.id, screenWidthPx, screenHeightPx, heightFraction) {
+                    detectDragGestures { change, delta ->
+                        change.consume()
+                        boardLeft = (boardLeft + delta.x / screenWidthPx).coerceIn(0f, .42f)
+                        boardTop = (boardTop + delta.y / screenHeightPx).coerceIn(0f, 1f - heightFraction)
+                    }
+                }
+                .clip(RoundedCornerShape(5.dp)).background(green).padding(7.dp)) {
                 Text("工事名  ${board.name}", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 board.rows.forEach { (label, value) -> HorizontalDivider(color = Color.White); Text("$label  $value", color = Color.White, fontSize = 12.sp, maxLines = 1) }
                 HorizontalDivider(color = Color.White)
                 Text(board.note, color = Color.White, fontSize = 11.sp, maxLines = 2)
                 Text("セコカン台帳", color = Color.White, fontSize = 10.sp, modifier = Modifier.align(Alignment.End))
             }
+            Text("黒板を指で移動できます", color = Color.White,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp)
+                    .background(Color.Black.copy(alpha = .45f), RoundedCornerShape(8.dp)).padding(8.dp))
         }
         TextButton(onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(16.dp).background(Color.Black.copy(alpha = .45f), RoundedCornerShape(10.dp))) { Text("✕ 戻る", color = Color.White) }
         Row(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = .6f)).padding(18.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
@@ -265,10 +313,15 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
                 val id = LocalStore.newId()
                 val original = store.newPhotoFile(id, true)
                 val finished = store.newPhotoFile(id, false)
+                // Freeze the drag position at shutter time; the JPEG callback runs on a worker.
+                val placement = if (board == null) null else BoardPlacement(
+                    boardLeft.coerceIn(0f, .42f), boardTop.coerceIn(0f, 1f - boardHeightFraction),
+                    .58f, boardHeightFraction
+                )
                 capture.takePicture(ImageCapture.OutputFileOptions.Builder(original).build(), worker, object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         try {
-                            BoardRenderer.render(original, finished, board)
+                            BoardRenderer.render(original, finished, board, placement)
                             activity.runOnUiThread { store.photos += Photo(id, siteId, folderId, board?.id, original.absolutePath, finished.absolutePath, System.currentTimeMillis()); onSaved() }
                         } catch (e: Exception) { finished.delete(); activity.runOnUiThread { busy = false; onError("保存できません: ${e.message}") } }
                     }

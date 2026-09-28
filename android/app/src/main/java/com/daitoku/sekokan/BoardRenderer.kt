@@ -13,7 +13,7 @@ import java.io.FileOutputStream
 
 /** Writes a separate JPEG containing the visible board. The unmodified capture stays on disk. */
 object BoardRenderer {
-    fun render(original: File, finished: File, board: Board?) {
+    fun render(original: File, finished: File, board: Board?, placement: BoardPlacement? = null) {
         val source = BitmapFactory.decodeFile(original.absolutePath) ?: error("写真を読み込めません")
         val angle = when (ExifInterface(original.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
             ExifInterface.ORIENTATION_ROTATE_90 -> 90f
@@ -27,20 +27,22 @@ object BoardRenderer {
             try {
                 val canvas = Canvas(output)
                 canvas.drawBitmap(upright, 0f, 0f, null)
-                if (board != null) drawBoard(canvas, output.width.toFloat(), output.height.toFloat(), board)
+                if (board != null && placement != null) drawBoard(canvas, output.width.toFloat(), output.height.toFloat(), board, placement)
                 FileOutputStream(finished).use { if (!output.compress(Bitmap.CompressFormat.JPEG, 92, it)) error("写真を保存できません") }
             } finally { output.recycle() }
         } finally { upright.recycle() }
     }
-    private fun drawBoard(canvas: Canvas, w: Float, h: Float, board: Board) {
-        val width = w * .58f
-        val height = (width * .68f).coerceAtMost(h * .42f)
-        val left = w - width - w * .035f
-        val top = h - height - h * .045f
+    private fun drawBoard(canvas: Canvas, w: Float, h: Float, board: Board, placement: BoardPlacement) {
+        val width = w * placement.width.coerceIn(0f, 1f)
+        val height = h * placement.height.coerceIn(0f, 1f)
+        val left = w * placement.left.coerceIn(0f, 1f - width / w)
+        val top = h * placement.top.coerceIn(0f, 1f - height / h)
         val rowHeight = (height * .75f / (board.rows.size + 1)).coerceAtMost(height * .20f)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.color = Color.rgb(11, 91, 61)
         canvas.drawRoundRect(RectF(left, top, left + width, top + height), width * .018f, width * .018f, paint)
+        canvas.save()
+        canvas.clipRect(left, top, left + width, top + height)
         paint.color = Color.WHITE
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = (width * .004f).coerceAtLeast(2f)
@@ -60,5 +62,9 @@ object BoardRenderer {
         paint.textSize = width * .032f
         canvas.drawText(board.note.take(26), left + width * .035f, top + height * .87f, paint)
         canvas.drawText("セコカン台帳", left + width * .72f, top + height * .96f, paint)
+        canvas.restore()
     }
 }
+
+/** Fractions of the visible, cropped camera image (top-left origin). */
+data class BoardPlacement(val left: Float, val top: Float, val width: Float, val height: Float)
