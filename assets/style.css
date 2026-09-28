@@ -52,3 +52,33 @@
 
 /* Mobile photo capture wizard (also used by installed PWA). */
 #mobileCaptureLauncher{display:none}.mobile-capture-choice{display:grid;gap:12px;margin:12px 0 18px;padding:16px;border:1px solid #d2e3e2;border-radius:12px;background:#f6fbfa}.mobile-capture-choice legend{font-weight:800;color:#173d42}.mobile-capture-choice label{display:flex;align-items:center;gap:10px;min-height:42px;padding:7px 10px;background:white;border:1px solid #e1ecec;border-radius:9px;cursor:pointer}.mobile-capture-choice input{width:20px;height:20px;accent-color:#087c83}.mobile-capture-summary{display:flex;gap:6px;align-items:start;flex-direction:column;margin:0 0 14px;padding:12px;border-radius:10px;background:#eff8f5;color:#173d42;font-size:13px}.mobile-capture-summary .btn{align-self:flex-end;padding:6px 12px;font-size:12px}#modal.mobile-capture-mode .mobile-capture-setup{display:none!important}#modal.mobile-capture-mode .dialog{width:min(720px,100%)}#modal.mobile-capture-mode #entryForm .actions button[type=submit]:disabled{opacity:.45;cursor:not-allowed}@media(max-width:760px){#mobileCaptureLauncher{display:flex;position:fixed;z-index:9;right:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));align-items:center;gap:8px;border:0;border-radius:999px;padding:14px 19px;background:#087c83;color:#fff;font-size:15px;font-weight:800;box-shadow:0 8px 24px #102d4866;min-height:54px}#mobileCaptureLauncher span{font-size:21px}#mobileCaptureLauncher:focus-visible{outline:3px solid #f7bf3e;outline-offset:3px}body:has(#modal:not([hidden])) #mobileCaptureLauncher,body:has(#photoLightbox:not([hidden])) #mobileCaptureLauncher{display:none}.modal{padding:10px}.dialog{max-height:calc(100dvh - 28px);padding:18px}main{padding-bottom:86px}#modal.mobile-capture-mode .photo-camera-stage{max-height:47dvh}.mobile-capture-choice label{font-size:16px}}
+/* Camera style full-screen viewfinder on mobile and installed PWA. */
+#modal.mobile-capture-mode{padding:0;background:#071219;place-items:stretch}
+#modal.mobile-capture-mode .dialog{position:relative;inset:0;width:100vw;max-width:none;height:100dvh;max-height:100dvh;padding:0;overflow:hidden;border-radius:0;background:#071219;color:#fff}
+#modal.mobile-capture-mode .dialog-head{display:none}
+#modal.mobile-capture-mode #entryForm{position:relative;width:100%;height:100%;overflow:hidden}
+#modal.mobile-capture-mode #entryForm>.photo-camera-actions,#modal.mobile-capture-mode #entryForm>.actions,#modal.mobile-capture-mode #entryForm>p.hint:not(#photoCameraStatus){display:none}
+#modal.mobile-capture-mode .photo-camera-stage{position:absolute;inset:0;display:block;width:100%;max-width:none;height:100%;max-height:none;aspect-ratio:auto;border-radius:0;background:#071219}
+#modal.mobile-capture-mode .photo-camera-stage video,#modal.mobile-capture-mode .photo-camera-stage>img{width:100%;height:100%;object-fit:cover}
+#modal.mobile-capture-mode .photo-camera-board{right:4%;bottom:calc(155px + env(safe-area-inset-bottom,0px));width:min(48%,260px);max-height:42dvh}
+#modal.mobile-capture-mode .photo-camera-board .board-preview{max-height:42dvh;overflow:hidden}
+#modal.mobile-capture-mode #photoCameraStatus{position:absolute;z-index:3;left:6%;right:6%;bottom:calc(143px + env(safe-area-inset-bottom,0px));margin:0;text-align:center;padding:7px 9px;border-radius:9px;background:#071219aa;color:#fff;font-size:12px;pointer-events:none}
+#mobileCameraHud{position:absolute;inset:0;z-index:5;pointer-events:none}
+.mobile-camera-top,.mobile-camera-bottom{position:absolute;left:0;right:0;display:flex;align-items:center;pointer-events:auto;background:linear-gradient(#071219cc,#07121900);color:#fff}
+.mobile-camera-top{top:0;gap:11px;padding:calc(12px + env(safe-area-inset-top,0px)) 14px 22px}
+.mobile-camera-top>div{flex:1;min-width:0}
+.mobile-camera-top strong{display:block;font-size:17px}
+.mobile-camera-top small{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#eef3f0;font-size:11px}
+.mobile-camera-top button{flex:none;width:42px;height:42px;border:1px solid #ffffff80;border-radius:50%;background:#07121977;color:white;font-size:29px;line-height:1;display:grid;place-items:center}
+.mobile-camera-bottom{bottom:0;min-height:142px;justify-content:space-around;gap:9px;padding:20px 18px calc(20px + env(safe-area-inset-bottom,0px));background:linear-gradient(#07121900,#071219f5 38%)}
+.mobile-camera-bottom>button:not(.mobile-shutter){min-width:73px;min-height:44px;border:1px solid #ffffff90;border-radius:10px;background:#142732db;color:#fff;font-weight:700;font-size:13px}
+.mobile-camera-bottom>button[data-mobile-save]{background:#087c83;border-color:#087c83}
+.mobile-camera-bottom>button:disabled{opacity:.5}
+.mobile-shutter{flex:none;width:78px;height:78px;display:grid;place-items:center;border:4px solid white;border-radius:50%;background:#ffffff2b;box-shadow:0 0 0 2px #0008}
+.mobile-shutter span{width:60px;height:60px;border-radius:50%;background:white}
+#mobileCameraExtras{position:absolute;z-index:6;left:12px;right:12px;bottom:calc(135px + env(safe-area-inset-bottom,0px));max-width:500px;margin:auto;padding:16px;background:#10252aec;border:1px solid #ffffff77;border-radius:14px;color:#fff;box-shadow:0 6px 20px #0009}
+#mobileCameraExtras .field{color:#fff}
+#mobileCameraExtras input{color:#18324a}
+@media(max-width:520px){.mobile-camera-bottom{gap:4px;padding-left:8px;padding-right:8px}.mobile-camera-bottom>button:not(.mobile-shutter){min-width:68px;font-size:12px}.mobile-shutter{width:70px;height:70px}.mobile-shutter span{width:53px;height:53px}}
+
+#modal.mobile-capture-mode #photoCameraStatus{bottom:auto;top:calc(88px + env(safe-area-inset-top,0px))}
