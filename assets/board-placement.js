@@ -96,7 +96,7 @@ async function saveBulkBoardPhotos(e){
   if(photos.some(p=>p.boardMode==='capture'||p.boardMode==='legacy-baked'))return alert('撮影時の黒板付き写真は後から変更できません。黒板なしの写真を選択してください');
   if(boardId&&!board)return alert('黒板を選び直してください');
   if(board){let missing=photos.find(p=>!bulkBoardReviewed.has(p.id));if(missing){bulkBoardSelectPhoto(missing.id);return alert('すべての写真で黒板の位置と内容を確認してください')}}
-  let previousPhotos=data.photos.slice(),previousBoards=data.blackboards.slice(),previousById=new Map(photos.map(p=>[p.id,p])),oldComposites=new Map();
+  let previousPhotos=data.photos.slice(),previousBoards=data.blackboards.slice(),previousById=new Map(photos.map(p=>[p.id,p])),photoNumber=new Map(photos.map((p,i)=>[p.id,i+1])),oldComposites=new Map();
   let button=e.currentTarget.querySelector('[type=submit]');if(button){button.disabled=true;button.textContent='画像を保存中…'}
   try{
     for(const photo of photos){
@@ -120,7 +120,7 @@ async function saveBulkBoardPhotos(e){
         let existing=descendants.get(key)||items('blackboards').find(b=>b.parentBoardId===board.id&&JSON.stringify(boardFieldSnapshot(b))===JSON.stringify(fields)&&(b.note||'')===note);
         if(existing)assignedBoard=existing;
         else{
-          assignedBoard={...board,id:uid(),name:`${board.name} · 後付け ${newBoards.length+1}`,parentBoardId:board.id,fields,note,isDefault:false,favorite:false,lastUsedAt:new Date().toISOString()};
+          assignedBoard={...board,id:uid(),name:`${board.name} · 後付け ${photoNumber.get(p.id)}`,parentBoardId:board.id,fields,note,isDefault:false,favorite:false,lastUsedAt:new Date().toISOString()};
           newBoards.push(assignedBoard);descendants.set(key,assignedBoard);
         }
       }
