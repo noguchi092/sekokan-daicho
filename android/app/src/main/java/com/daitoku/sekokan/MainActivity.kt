@@ -48,6 +48,9 @@ import android.util.Rational
 import java.io.File
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val ink = Color(0xFF123C3E)
 private val green = Color(0xFF0B5B3D)
@@ -68,6 +71,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun App(store: LocalStore, activity: ComponentActivity) {
     var revision by remember { mutableIntStateOf(0) }
+    val scope = rememberCoroutineScope()
     fun commit() { store.save(); revision++ }
     var siteId by remember { mutableStateOf(store.sites.firstOrNull()?.id.orEmpty()) }
     var folderId by remember { mutableStateOf(store.folders.firstOrNull { it.siteId == siteId }?.id.orEmpty()) }
@@ -178,12 +182,30 @@ private fun App(store: LocalStore, activity: ComponentActivity) {
                 }
                 "photo" -> {
                     val p = viewed
+                    var verification by remember(p?.id, revision) { mutableStateOf("未照合") }
                     val bitmap = remember(p?.finished, revision) { p?.finished?.let { BitmapFactory.decodeFile(it) } }
                     if (bitmap != null) Image(bitmap.asImageBitmap(), "撮影写真", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
                     Text(if (p?.boardId != null) "撮影時の黒板を写真に焼き込んで保存しました。この写真は編集できません。" else "黒板なしの写真", color = Color.Gray)
+                    if (p != null) {
+                        OutlinedButton(onClick = { scope.launch { verification = "照合中…"; verification = withContext(Dispatchers.IO) { try { PhotoIntegrity.verify(p) } catch (e: Exception) { "確認不可：${e.message}" } } } }) { Text("端末内で照合") }
+                        Text(verification, color = if (verification.startsWith("不一致")) Color.Red else green)
+                    }
                     if (p != null && p.boardId == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), false); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↶ 左に90°") }
-                        OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), true); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↷ 右に90°") }
+                        for ((clockwise, label) in listOf(false to "↶ 左に90°", true to "↷ 右に90°")) {
+                            OutlinedButton(onClick = { scope.launch {
+                                try {
+                                    val hash = withContext(Dispatchers.IO) {
+                                        val status = PhotoIntegrity.verify(p)
+                                        if (p.sha256 != null && !status.startsWith("一致")) error(status)
+                                        BoardRenderer.rotatePair(File(p.original), File(p.finished), clockwise)
+                                        PhotoIntegrity.sha256(File(p.finished))
+                                    }
+                                    val index = store.photos.indexOfFirst { it.id == p.id }
+                                    if (index >= 0) { store.photos[index] = p.copy(sha256 = hash); viewed = store.photos[index] }
+                                    commit()
+                                } catch (e: Exception) { message = "回転できません: ${e.message}" }
+                            } }) { Text(label) }
+                        }
                     }
                     TextButton(onClick = { screen = "gallery" }) { Text("写真一覧へ") }
                 }
@@ -332,9 +354,10 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         try {
                             BoardRenderer.render(original, finished, board, placement)
+                            val sha256 = PhotoIntegrity.sha256(finished)
                             if (board != null) original.delete()
                             val savedPath = if (board == null) original.absolutePath else finished.absolutePath
-                            activity.runOnUiThread { store.photos += Photo(id, siteId, folderId, board?.id, savedPath, finished.absolutePath, System.currentTimeMillis()); onSaved() }
+                            activity.runOnUiThread { store.photos += Photo(id, siteId, folderId, board?.id, savedPath, finished.absolutePath, System.currentTimeMillis(), sha256); onSaved() }
                         } catch (e: Exception) { finished.delete(); activity.runOnUiThread { busy = false; onError("保存できません: ${e.message}") } }
                     }
                     override fun onError(exception: androidx.camera.core.ImageCaptureException) { original.delete(); activity.runOnUiThread { busy = false; onError("撮影できません: ${exception.message}") } }
