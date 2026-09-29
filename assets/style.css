@@ -161,3 +161,6 @@
 .board-grid .board-card:has(+ .board-card-child),.board-grid .board-card-child{grid-column:1/-1;max-width:440px}
 .board-card-child{margin-left:24px;border-left:4px solid #087c83;background:#f6fbfa}
 .board-parent-note{display:block;margin:7px 0;color:#087c83;font-weight:700}
+
+.board-folder-visual{margin-bottom:16px;min-height:0}
+.board-folder-visual .visual-folder-card:focus-visible{outline:2px solid #167772;outline-offset:2px}
