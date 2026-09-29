@@ -11,7 +11,7 @@ import androidx.exifinterface.media.ExifInterface
 import java.io.File
 import java.io.FileOutputStream
 
-/** Writes a separate JPEG containing the visible board. The unmodified capture stays on disk. */
+/** Renders the visible board directly into the saved JPEG. Capture policy decides whether to retain the source. */
 object BoardRenderer {
     fun render(original: File, finished: File, board: Board?, placement: BoardPlacement? = null) {
         val source = BitmapFactory.decodeFile(original.absolutePath) ?: error("写真を読み込めません")
