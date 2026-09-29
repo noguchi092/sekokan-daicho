@@ -32,6 +32,34 @@ object BoardRenderer {
             } finally { output.recycle() }
         } finally { upright.recycle() }
     }
+    /** Rotate both stored versions together; restore originals if either write fails. */
+    fun rotatePair(original: File, finished: File, clockwise: Boolean) {
+        val files = listOf(original, finished).distinctBy { it.absolutePath }
+        val backups = files.map { File(it.parentFile, it.name + ".rotate-backup") }
+        val drafts = files.map { File(it.parentFile, it.name + ".rotate-draft") }
+        try {
+            files.forEachIndexed { i, file ->
+                require(file.isFile) { "保存された写真が見つかりません" }
+                file.copyTo(backups[i], overwrite = true)
+                val source = BitmapFactory.decodeFile(file.absolutePath) ?: error("写真を読み込めません")
+                val exifAngle = when (ExifInterface(file.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+                    ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+                    ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+                    ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+                    else -> 0f
+                }
+                val angle = (exifAngle + if (clockwise) 90f else 270f) % 360f
+                val rotated = Bitmap.createBitmap(source, 0, 0, source.width, source.height, Matrix().apply { postRotate(angle) }, true)
+                try { FileOutputStream(drafts[i]).use { if (!rotated.compress(Bitmap.CompressFormat.JPEG, 92, it)) error("写真を回転できません") } }
+                finally { rotated.recycle(); if (rotated !== source) source.recycle() }
+            }
+            drafts.forEachIndexed { i, file -> file.copyTo(files[i], overwrite = true) }
+        } catch (e: Exception) {
+            backups.forEachIndexed { i, backup -> if (backup.exists()) backup.copyTo(files[i], overwrite = true) }
+            throw e
+        } finally { backups.forEach { it.delete() }; drafts.forEach { it.delete() } }
+    }
+
     private fun drawBoard(canvas: Canvas, w: Float, h: Float, board: Board, placement: BoardPlacement) {
         val width = w * placement.width.coerceIn(0f, 1f)
         val height = h * placement.height.coerceIn(0f, 1f)
