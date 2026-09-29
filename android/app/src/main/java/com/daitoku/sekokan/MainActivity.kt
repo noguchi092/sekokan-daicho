@@ -3,6 +3,7 @@ package com.daitoku.sekokan
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.View
 import androidx.activity.ComponentActivity
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -167,7 +169,7 @@ private fun App(store: LocalStore, activity: ComponentActivity) {
                     if (photos.isEmpty()) Text("写真はまだありません", modifier = Modifier.padding(top = 24.dp))
                     LazyColumn { items(photos) { p ->
                         Row(Modifier.fillMaxWidth().padding(vertical = 6.dp).background(Color.White, RoundedCornerShape(10.dp)).clickable { viewed = p; screen = "photo" }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            val bitmap = remember(p.finished) { BitmapFactory.decodeFile(p.finished) }
+                            val bitmap = remember(p.finished, revision) { BitmapFactory.decodeFile(p.finished) }
                             if (bitmap != null) Image(bitmap.asImageBitmap(), null, Modifier.size(90.dp), contentScale = ContentScale.Crop)
                             Spacer(Modifier.width(12.dp))
                             Column { Text(java.text.SimpleDateFormat("yyyy/MM/dd HH:mm", java.util.Locale.JAPAN).format(p.createdAt)); Text(if (p.boardId == null) "黒板なし" else "黒板付き", color = green) }
@@ -176,9 +178,13 @@ private fun App(store: LocalStore, activity: ComponentActivity) {
                 }
                 "photo" -> {
                     val p = viewed
-                    val bitmap = remember(p?.finished) { p?.finished?.let { BitmapFactory.decodeFile(it) } }
+                    val bitmap = remember(p?.finished, revision) { p?.finished?.let { BitmapFactory.decodeFile(it) } }
                     if (bitmap != null) Image(bitmap.asImageBitmap(), "撮影写真", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
                     Text("元写真もアプリ内に保存されています", color = Color.Gray)
+                    if (p != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), false); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↶ 左に90°") }
+                        OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), true); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↷ 右に90°") }
+                    }
                     TextButton(onClick = { screen = "gallery" }) { Text("写真一覧へ") }
                 }
             }
@@ -235,6 +241,7 @@ private fun BoardEditor(initial: Board?, onSave: (String, Int, List<Pair<String,
 @Composable
 private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: Board?, siteId: String, folderId: String, onBack: () -> Unit, onSaved: () -> Unit, onError: (String) -> Unit) {
     val context = LocalContext.current
+    val orientation = LocalConfiguration.current.orientation
     val capture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY).build() }
     val providerFuture = remember { ProcessCameraProvider.getInstance(context) }
     val worker = remember { Executors.newSingleThreadExecutor() }
@@ -244,11 +251,13 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
     var boardHeightFraction by remember(board?.id) { mutableFloatStateOf(.25f) }
     DisposableEffect(Unit) {
         val oldFlags = activity.window.decorView.systemUiVisibility
+        val oldOrientation = activity.requestedOrientation
+        activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_SENSOR
         activity.window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        onDispose { activity.window.decorView.systemUiVisibility = oldFlags; if (providerFuture.isDone) providerFuture.get().unbindAll(); worker.shutdown() }
+        onDispose { activity.requestedOrientation = oldOrientation; activity.window.decorView.systemUiVisibility = oldFlags; if (providerFuture.isDone) providerFuture.get().unbindAll(); worker.shutdown() }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
-        AndroidView(factory = { ctx ->
+        key(orientation) { AndroidView(factory = { ctx ->
             PreviewView(ctx).apply {
                 scaleType = PreviewView.ScaleType.FILL_CENTER
                 val previewView = this
@@ -261,7 +270,8 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
                             Rational(width, height), previewView.display?.rotation ?: 0
                         ).setScaleType(ViewPort.FILL_CENTER).build()
                         provider.unbindAll()
-                        val preview = Preview.Builder().build().also { it.surfaceProvider = surfaceProvider }
+                        capture.targetRotation = previewView.display?.rotation ?: android.view.Surface.ROTATION_0
+                        val preview = Preview.Builder().build().also { it.targetRotation = capture.targetRotation; it.surfaceProvider = surfaceProvider }
                         val group = UseCaseGroup.Builder().setViewPort(viewport)
                             .addUseCase(preview).addUseCase(capture).build()
                         provider.bindToLifecycle(activity, CameraSelector.DEFAULT_BACK_CAMERA, group)
@@ -273,7 +283,7 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
                     previewView.post { bindWhenReady() }
                 }, ContextCompat.getMainExecutor(ctx))
             }
-        }, modifier = Modifier.fillMaxSize())
+        }, modifier = Modifier.fillMaxSize()) }
         if (board != null) {
             val boardWidth = maxWidth * .58f
             val boardHeight = (boardWidth * .68f).coerceAtMost(maxHeight * .42f)
