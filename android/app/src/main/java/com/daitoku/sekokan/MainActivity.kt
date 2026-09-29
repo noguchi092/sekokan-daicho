@@ -180,8 +180,8 @@ private fun App(store: LocalStore, activity: ComponentActivity) {
                     val p = viewed
                     val bitmap = remember(p?.finished, revision) { p?.finished?.let { BitmapFactory.decodeFile(it) } }
                     if (bitmap != null) Image(bitmap.asImageBitmap(), "撮影写真", Modifier.fillMaxWidth().weight(1f), contentScale = ContentScale.Fit)
-                    Text("元写真もアプリ内に保存されています", color = Color.Gray)
-                    if (p != null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(if (p?.boardId != null) "撮影時の黒板を写真に焼き込んで保存しました。この写真は編集できません。" else "黒板なしの写真", color = Color.Gray)
+                    if (p != null && p.boardId == null) Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), false); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↶ 左に90°") }
                         OutlinedButton(onClick = { try { BoardRenderer.rotatePair(File(p.original), File(p.finished), true); commit() } catch (e: Exception) { message = "回転できません: ${e.message}" } }) { Text("↷ 右に90°") }
                     }
@@ -332,7 +332,9 @@ private fun CameraScreen(activity: ComponentActivity, store: LocalStore, board: 
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         try {
                             BoardRenderer.render(original, finished, board, placement)
-                            activity.runOnUiThread { store.photos += Photo(id, siteId, folderId, board?.id, original.absolutePath, finished.absolutePath, System.currentTimeMillis()); onSaved() }
+                            if (board != null) original.delete()
+                            val savedPath = if (board == null) original.absolutePath else finished.absolutePath
+                            activity.runOnUiThread { store.photos += Photo(id, siteId, folderId, board?.id, savedPath, finished.absolutePath, System.currentTimeMillis()); onSaved() }
                         } catch (e: Exception) { finished.delete(); activity.runOnUiThread { busy = false; onError("保存できません: ${e.message}") } }
                     }
                     override fun onError(exception: androidx.camera.core.ImageCaptureException) { original.delete(); activity.runOnUiThread { busy = false; onError("撮影できません: ${exception.message}") } }
