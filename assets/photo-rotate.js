@@ -1,0 +1,18 @@
+/* Rotate saved sources and their separate blackboard composites together. */
+(()=>{
+  const previewUrls=new Map();
+  function clearPreview(id){let url=previewUrls.get(id);if(url)URL.revokeObjectURL(url);previewUrls.delete(id)}
+  async function compositeUrl(photo){if(previewUrls.has(photo.id))return previewUrls.get(photo.id);let blob=await getCompositePhoto(photo);if(!blob)return '';let url=URL.createObjectURL(blob);previewUrls.set(photo.id,url);return url}
+  async function hydrate(image,id){let photo=items('photos').find(p=>p.id===id);if(!photo?.useCompositePreview)return;let url=await compositeUrl(photo);if(url&&image.isConnected&&image.dataset.compositePhoto===id)image.src=url}
+  window.hydrateCompositePreviews=()=>document.querySelectorAll('img[data-composite-photo]').forEach(image=>hydrate(image,image.dataset.compositePhoto));
+  window.hydrateViewerComposite=photo=>{let image=document.querySelector('#photoLightboxImage');if(!image||!photo.useCompositePreview)return;image.dataset.compositePhoto=photo.id;hydrate(image,photo.id)};
+  function loadImage(blob){return new Promise((resolve,reject)=>{let url=URL.createObjectURL(blob),image=new Image();image.onload=()=>{URL.revokeObjectURL(url);resolve(image)};image.onerror=()=>{URL.revokeObjectURL(url);reject(Error('画像を読み込めません'))};image.src=url})}
+  async function rotateBlob(blob,direction){let image=await loadImage(blob),canvas=document.createElement('canvas');canvas.width=image.naturalHeight;canvas.height=image.naturalWidth;let ctx=canvas.getContext('2d');ctx.translate(direction===90?canvas.width:0,direction===90?0:canvas.height);ctx.rotate(direction*Math.PI/180);ctx.drawImage(image,0,0);return new Promise((resolve,reject)=>canvas.toBlob(result=>result?resolve(result):reject(Error('画像を回転できません')),'image/jpeg',.85))}
+  const dataUrl=blob=>new Promise((resolve,reject)=>{let reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(blob)});
+  async function rotatePhoto(photo,direction){let oldImage=photo.image,oldPreview=photo.useCompositePreview,oldKey=photo.compositeKey,oldComposite=photoBoard(photo)?await getCompositePhoto(photo):null;
+    let original=await(await fetch(oldImage)).blob(),board=photoBoard(photo)?oldComposite||await photoDownloadBlob(photo):null;
+    let newImage=await dataUrl(await rotateBlob(original,direction)),newComposite=board?await rotateBlob(board,direction):null;
+    try{if(newComposite)await compositeStore('put',photo.id,newComposite);photo.image=newImage;if(newComposite){photo.compositeKey=photo.id;photo.useCompositePreview=true}if(!save())throw Error('写真の保存容量を超えました');clearPreview(photo.id)}catch(error){photo.image=oldImage;photo.useCompositePreview=oldPreview;photo.compositeKey=oldKey;if(oldComposite)await compositeStore('put',photo.id,oldComposite).catch(console.error);else if(newComposite)await compositeStore('delete',photo.id).catch(console.error);throw error}}
+  document.addEventListener('click',async e=>{let button=e.target.closest('[data-photo-rotate]');if(!button)return;let photo=photoGallery[photoGalleryIndex];if(!photo)return;let direction=Number(button.dataset.photoRotate);if(![-90,90].includes(direction))return;document.querySelectorAll('[data-photo-rotate]').forEach(x=>x.disabled=true);try{await rotatePhoto(photo,direction);updatePhotoViewer();render()}catch(error){console.error('写真の回転に失敗',error);alert('写真を回転できませんでした。画像と端末の保存容量を確認してください')}finally{document.querySelectorAll('[data-photo-rotate]').forEach(x=>x.disabled=false)}});
+  window.addEventListener('beforeunload',()=>[...previewUrls.keys()].forEach(clearPreview));
+})();
