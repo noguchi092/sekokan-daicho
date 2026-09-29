@@ -125,3 +125,39 @@
 #modal:has(.board-layout-choices) .board-layout-choice .chalk-footer{font-size:10px}
 #modal:has(.board-layout-choices) #entryForm>.actions{flex:none;margin:0;padding:13px clamp(18px,3vw,48px) calc(13px + env(safe-area-inset-bottom,0px));border-top:1px solid #dce7e6;background:#fff}
 @media(max-width:640px){#modal:has(.board-layout-choices) .dialog-head{padding:16px 18px}#modal:has(.board-layout-choices) #entryForm>.hint{padding:10px 18px}#modal:has(.board-layout-choices) .board-layout-choices{grid-template-columns:repeat(auto-fill,minmax(min(100%,240px),1fr));gap:12px;padding:6px 18px 20px}#modal:has(.board-layout-choices) .board-layout-choice .board-preview{min-height:190px}}
+/* 後付け黒板：写真ごとの配置と内容編集 */
+#modal:has(#bulkBoardPlacement) .dialog{width:min(1240px,calc(100vw - 28px));max-width:none;height:min(94dvh,960px);max-height:94dvh;display:flex;flex-direction:column;overflow:hidden}
+#modal:has(#bulkBoardPlacement) .dialog-head{flex:none}
+#modal:has(#bulkBoardPlacement) .dialog h2{margin-bottom:10px}
+#modal:has(#bulkBoardPlacement) #entryForm{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column}
+#modal:has(#bulkBoardPlacement) #entryForm>.hint{margin:0 0 10px}
+#modal:has(#bulkBoardPlacement) #entryForm>.actions{position:sticky;bottom:0;z-index:2;margin-top:auto;padding:12px 0 0;border-top:1px solid #dce7e6;background:#fff}
+.bulk-board-picker{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:12px;flex:none}
+.bulk-board-picker .field{margin:0;font-size:12px}
+.bulk-board-picker input,.bulk-board-picker select{width:100%;margin-top:4px;padding:9px}
+#modal:has(#bulkBoardPlacement) .bulk-placement{margin:14px 0;min-width:0}
+.bulk-photo-strip{display:flex;gap:8px;overflow-x:auto;padding:2px 1px 10px}
+.bulk-photo-tab{flex:0 0 98px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px;border:2px solid #d6e2e2;border-radius:9px;background:#fff;color:#25445b;font-weight:700;font-size:12px}
+.bulk-photo-tab.active{border-color:#087c83;background:#e8f5f1}
+.bulk-photo-tab img{width:82px;height:55px;object-fit:cover;border-radius:4px}
+.bulk-progress{font-weight:800;color:#175a58;margin:4px 0 12px}
+.bulk-workspace{display:grid;grid-template-columns:minmax(0,1fr) minmax(280px,360px);gap:20px;align-items:start}
+.bulk-placement-main{min-width:0;text-align:center}
+.bulk-placement-main>.hint{text-align:left;margin:0 0 8px}
+.bulk-placement-stage{display:inline-block;vertical-align:top;width:auto;max-width:100%;margin:auto}
+.bulk-placement-stage>img{display:block;width:auto;max-width:100%;height:auto;max-height:52dvh}
+.bulk-placement-board{width:43%}
+.bulk-placement-side{max-height:55dvh;overflow-y:auto;border:1px solid #d8e7e5;border-radius:10px;background:white;padding:15px;line-height:1.5}
+.bulk-placement-side h3{margin:0 0 8px}
+.bulk-placement-side p{font-size:13px}
+.bulk-edit-fields{display:grid;gap:10px}
+.bulk-edit-row{display:grid;grid-template-columns:minmax(100px, .8fr) minmax(140px,1.2fr);gap:8px}
+.bulk-edit-fields label{display:grid;gap:4px;font-size:12px;font-weight:700;color:#315465}
+.bulk-edit-fields input,.bulk-edit-fields textarea{width:100%;min-width:0;padding:8px;border:1px solid #cbdadf;border-radius:7px;background:white}
+.bulk-edit-fields textarea{min-height:70px;resize:vertical}
+.bulk-step-actions,.bulk-navigation{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+.bulk-navigation{justify-content:space-between}
+@media(max-width:800px){#modal:has(#bulkBoardPlacement){padding:0}#modal:has(#bulkBoardPlacement) .dialog{width:100vw;height:100dvh;max-height:100dvh;border-radius:0;padding:16px}#modal:has(#bulkBoardPlacement) .bulk-board-picker{grid-template-columns:1fr}#modal:has(#bulkBoardPlacement) .bulk-workspace{grid-template-columns:1fr}.bulk-placement-stage>img{max-height:42dvh}.bulk-placement-side{max-height:none;overflow:visible}.bulk-edit-row{grid-template-columns:1fr 1fr}}
+.board-grid .board-card:has(+ .board-card-child),.board-grid .board-card-child{grid-column:1/-1;max-width:440px}
+.board-card-child{margin-left:24px;border-left:4px solid #087c83;background:#f6fbfa}
+.board-parent-note{display:block;margin:7px 0;color:#087c83;font-weight:700}
