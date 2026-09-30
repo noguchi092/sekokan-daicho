@@ -178,3 +178,33 @@
 
 /* Site overview and weekly forecast */
 .site-info{max-width:1050px;margin:0 auto 24px}.site-info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 20px}.site-info-grid .field{margin:0;min-width:0}.site-info-wide{grid-column:1/-1}.site-info-actions{display:flex;align-items:center;gap:14px;margin-top:16px}.site-info-actions [role=status]{color:#087c83;font-size:14px}.site-weather{margin-top:24px}.site-weather .section-head{align-items:flex-start;gap:15px}.site-weather .section-head .hint{margin:7px 0;overflow-wrap:anywhere}.weather-days{display:grid;grid-template-columns:repeat(7,minmax(120px,1fr));gap:10px;overflow-x:auto;padding:3px 0 12px}.weather-day{display:flex;flex-direction:column;align-items:center;gap:7px;padding:16px 8px;border:1px solid #dce7e6;border-radius:12px;background:#f8fbfb;font-size:14px}.weather-day small{font-size:12px;white-space:nowrap}.weather-symbol{font-size:30px}.weather-high{color:#b33332;font-weight:800}.weather-low{color:#2361a4;font-weight:800}.weather-source{display:block;color:#627b83;font-size:12px;margin-top:12px}.weather-source a{text-decoration:underline}.weather-place{margin:6px;max-width:100%;white-space:normal;text-align:left}@media(max-width:600px){.site-info-grid{grid-template-columns:1fr}.site-weather .section-head{flex-wrap:wrap}.site-info-actions{flex-wrap:wrap}}
+
+.hierarchy-section{margin:16px 0;border:1px solid #d5e0e8;border-radius:12px;background:#fff;overflow:hidden}
+.hierarchy-section>summary{display:flex;align-items:center;gap:12px;cursor:pointer;padding:16px 20px;background:#f0f5f8;color:#102d48;font-weight:700;font-size:16px;list-style:none}
+.hierarchy-section>summary::-webkit-details-marker{display:none}
+.hierarchy-section>summary:before{content:'▸';font-size:18px}
+.hierarchy-section[open]>summary:before{content:'▾'}
+.hierarchy-section>summary small{margin-left:auto;font-size:12px;font-weight:400}
+.hierarchy-section[open] .hierarchy-fold-closed,.hierarchy-section:not([open]) .hierarchy-fold-open{display:none}
+.hierarchy-section-body{padding:18px}
+.hierarchy-section-body>.site-info{margin:0;box-shadow:none;border:0;padding:0}
+.hierarchy-section-body>.site-info>.section-head{display:none}
+.partner-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.partner-chart{margin-top:20px}
+.partner-prime{max-width:520px;margin:0 auto}
+.partner-trades{position:relative;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;padding-top:18px;border-top:2px solid #aebfcd}
+.partner-trade{position:relative;border:1px solid #cbd9e3;border-radius:10px;background:#f5f8fa;min-width:0}
+.partner-trade:before{content:'';position:absolute;left:50%;top:-20px;height:18px;border-left:2px solid #aebfcd}
+.partner-trade-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;border-bottom:1px solid #d5e0e8}
+.partner-trade-title h3{margin:0;font-size:15px;flex:1;overflow-wrap:anywhere}
+.partner-trade-title span{font-size:12px}
+.partner-trade-title .btn{padding:5px 9px;font-size:12px}
+.partner-companies{display:grid;gap:10px;padding:12px}
+.partner-company{background:#fff;border:1px solid #d5e0e8;border-radius:8px;padding:12px;overflow-wrap:anywhere}
+.partner-company h4{margin:0 0 8px;font-size:16px}
+.partner-company p{margin:4px 0;font-size:13px}
+.partner-note{white-space:pre-wrap}
+.partner-actions{display:flex;gap:8px;margin-top:10px}
+.partner-actions .btn{font-size:12px;padding:5px 10px}
+.partner-empty{text-align:center}
+@media(max-width:600px){.hierarchy-section-body{padding:12px}.partner-trades{grid-template-columns:1fr}.hierarchy-section>summary{padding:14px}}
