@@ -234,7 +234,7 @@ async function photoDownloadBlob(photo){
   const loadImage=source=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=reject;img.src=source});
   const img=await loadImage(photo.image),canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;
   ctx.fillStyle='#fff';ctx.fillRect(0,0,w,h);ctx.drawImage(img,0,0,w,h);
-  const fields=board.fields||[],bw=Math.round(w*.43),margin=Math.round(w*.025),row=Math.max(22,Math.round(bw*.11)),bh=Math.max(row*2,Math.min(Math.round(h*.8),row*(fields.length+2))),bx=Number.isFinite(board.xRatio)?Math.round(Math.max(0,Math.min(1-bw/w,board.xRatio))*w):w-bw-margin,by=Number.isFinite(board.yRatio)?Math.round(Math.max(0,Math.min(1-bh/h,board.yRatio))*h):h-bh-margin-Math.round(h*(board.bottomRatio||0)),left=Math.round(bw*.34);if(by<0)by=0;
+  const fields=board.fields||[],bw=Math.min(w*.43,h*.8*4/3),margin=Math.round(w*.025),bh=bw*3/4,row=Math.min(bw*.11,bh/Math.max(2,fields.length+2)),bx=Number.isFinite(board.xRatio)?Math.round(Math.max(0,Math.min(1-bw/w,board.xRatio))*w):w-bw-margin,by=Number.isFinite(board.yRatio)?Math.round(Math.max(0,Math.min(1-bh/h,board.yRatio))*h):h-bh-margin-Math.round(h*(board.bottomRatio||0)),left=Math.round(bw*.34);if(by<0)by=0;
   ctx.fillStyle='#075927';ctx.fillRect(bx,by,bw,bh);ctx.lineWidth=Math.max(2,Math.round(w*.002));ctx.strokeStyle='#fff';ctx.strokeRect(bx,by,bw,bh);const font=Math.max(12,Math.round(row*.4));ctx.font=`bold ${font}px sans-serif`;ctx.textBaseline='middle';ctx.fillStyle='#fff';
   function clipped(value,x,y,max){let label=String(value||'');while(label.length&&ctx.measureText(label).width>max)label=label.slice(0,-1);ctx.fillText(label,x,y)}
   fields.forEach((field,i)=>{let y=by+row*i;ctx.beginPath();ctx.moveTo(bx,y+row);ctx.lineTo(bx+bw,y+row);ctx.moveTo(bx+left,y);ctx.lineTo(bx+left,y+row);ctx.stroke();clipped(field.label,bx+8,y+row/2,left-14);clipped(field.value,bx+left+8,y+row/2,bw-left-16)});
@@ -363,3 +363,4 @@ $('#entryForm').addEventListener('submit',e=>{
   if(!save()){site.subcontractors=previous;return}
   editingPartnerId='';editingPartnerSiteId='';closeForm();render();
 },true);
+
