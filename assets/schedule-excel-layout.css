@@ -18,3 +18,9 @@
 .schedule-empty-row td{position:relative}
 .schedule-sheet.excel-layout .schedule-empty-row th,.schedule-sheet.excel-layout .schedule-empty-row td{height:34px}
 @media(max-width:900px){.excel-schedule-canvas .excel-schedule-meta{grid-template-columns:1fr}.excel-schedule-canvas .excel-schedule-title{grid-template-columns:minmax(0,1fr) minmax(150px,250px)}}
+
+.schedule-grid tbody{user-select:none}
+.schedule-sheet.excel-layout .schedule-grid tbody tr:not(.schedule-annotation)>td{position:relative}
+.schedule-sheet.excel-layout .schedule-grid td.schedule-range-selected{box-shadow:inset 0 0 0 2px #087c83;background:#bce6ef}
+.schedule-cell-bottom-line{position:absolute;left:0;right:-1px;bottom:0;border-bottom:2px solid #304960;pointer-events:none;z-index:3}
+.schedule-annotation[hidden]{display:none!important}
