@@ -90,6 +90,13 @@
       const row=slots.get(slot)||emptyRows.shift();
       if(!row)continue;
       row.dataset.gridSlot=slot;
+      const entry=items('schedule').find(s=>s.id===row.dataset.gridTask);
+      row.firstElementChild.innerHTML=`<input class="schedule-title-input" data-grid-title type="text" value="${esc(entry?.title||'')}" aria-label="工程名 ${slot+1}" maxlength="100">`;
+      [...row.children].slice(1,-1).forEach((td,col)=>{
+        td.dataset.gridDate=dates[col];
+        const value=(data.scheduleCellTexts||[]).find(t=>t.projectId===projectId&&t.slot===slot&&t.date===dates[col])?.text;
+        if(value){const text=document.createElement('span');text.className='schedule-cell-text';text.textContent=value;td.append(text)}
+      });
       body.append(row);
       const task=row.dataset.gridTask;
       if(task){
@@ -113,18 +120,21 @@
           if(line.end<dates[0]||line.start>dates.at(-1))continue;
           const first=dates.indexOf(line.start),last=dates.indexOf(line.end);
           const from=first<0?0:first,to=last<0?dates.length-1:last;
-          const left=from*52+4,right=(to+1)*52-4,y=29,color=/^#[0-9a-f]{6}$/i.test(line.color)?line.color:'#304960';
-          const path=line.style==='r'?`M ${left} ${y} Q ${(left+right)/2} 2 ${right} ${y}`:`M ${left} ${y} L ${right} ${y}`;
+          const left=from*52,right=(to+1)*52,span=Math.max(1,Number(line.rowSpan)||1),height=34*span,color=/^#[0-9a-f]{6}$/i.test(line.color)?line.color:'#304960';
+          const curved=line.style==='r'||line.style.startsWith('r-');
+          const g=curved?scheduleCornerGeometry(line.style==='r'?'r-right-up':line.style,left,right,height):{path:`M ${left} ${height} H ${right}`,sx:left,sy:height,ex:right,ey:height,startAngle:0,endAngle:0};
           const dash=line.style==='dashed'?'9 5':line.style==='dotted'?'2 5':'';
           const layer=document.createElement('span');layer.className='schedule-cell-line-layer';
-          layer.innerHTML=`<svg viewBox="0 0 ${dates.length*52} 34" preserveAspectRatio="none" aria-label="${esc(line.label||'工程線')}"><path d="${path}" fill="none" stroke="${color}" stroke-width="${line.weight||2}" vector-effect="non-scaling-stroke" ${dash?`stroke-dasharray="${dash}"`:''}/>${first>=0?scheduleMarker(line.startMarker,left,y,color,'start'):''}${last>=0?scheduleMarker(line.endMarker,right,y,color,'end'):''}${line.label?`<text x="${(left+right)/2}" y="12" text-anchor="middle" fill="${color}" font-size="12">${esc(line.label)}</text>`:''}</svg>`;
+          layer.dataset.rowSpan=curved?span:1;
+          const marker=(kind,x,y,side,angle)=>`<g transform="rotate(${angle} ${x} ${y})">${scheduleMarker(kind,x,y,color,side)}</g>`;
+          layer.innerHTML=`<svg viewBox="0 0 ${dates.length*52} ${height}" preserveAspectRatio="none" aria-label="${esc(line.label||'工程線')}"><path d="${g.path}" fill="none" stroke="${color}" stroke-width="${line.weight||2}" vector-effect="non-scaling-stroke" ${dash?`stroke-dasharray="${dash}"`:''}/>${first>=0?marker(line.startMarker,g.sx,g.sy,'start',g.startAngle):''}${last>=0?marker(line.endMarker,g.ex,g.ey,'end',g.endAngle):''}${line.label?`<text x="${(left+right)/2}" y="${Math.max(12,g.sy-8)}" text-anchor="middle" fill="${color}" font-size="12">${esc(line.label)}</text>`:''}</svg>`;
           cells[0].append(layer);
           const edit=document.createElement('button');edit.type='button';edit.className='btn secondary';edit.dataset.scheduleLineEdit=line.id;edit.textContent='線編集';row.lastElementChild.append(edit);
         }
       }
     }
     const hint=document.querySelector('.schedule-toolbar .hint');
-    if(hint)hint.textContent='左ドラッグでセル範囲を選択 → 右クリックで下端に工程線。Escで選択解除。上のバーで線種・色・端点を選べます。';
+    if(hint)hint.textContent='工程名は直接入力。日付セルはダブルクリック、または選択して文字入力。左ドラッグ→右クリックで線。R線は選択範囲の上下の交点を結びます。';
     const columns=document.createElement('colgroup');
     columns.innerHTML='<col class="excel-label-column">'+dayHeaders.map(()=>'<col class="excel-day-column">').join('')+'<col class="excel-actions-column">';
     table.prepend(columns);
@@ -140,6 +150,12 @@
       canvas.style.setProperty('--excel-day-width',day+'px');
       canvas.style.setProperty('--excel-actions-width',actions+'px');
       canvas.style.setProperty('--excel-date-width',(day*dayHeaders.length)+'px');
+      const allRows=[...body.querySelectorAll('tr:not(.schedule-annotation)')];
+      table.querySelectorAll('.schedule-cell-line-layer').forEach(layer=>{
+        const row=layer.closest('tr'),index=allRows.indexOf(row),last=allRows[Math.min(allRows.length-1,index+Number(layer.dataset.rowSpan)-1)];
+        layer.style.top='0px';layer.style.bottom='auto';
+        layer.style.height=(last.getBoundingClientRect().bottom-row.getBoundingClientRect().top)+'px';
+      });
       table.querySelectorAll('.schedule-line-svg').forEach(svg=>{
         svg.setAttribute('preserveAspectRatio','none');
         svg.style.width='100%';
@@ -179,7 +195,7 @@
         rows[r].children[c+1].classList.add('schedule-range-selected');
   }
   document.addEventListener('pointerdown',e=>{
-    if(e.button!==0||e.pointerType==='touch')return;
+    if(e.button!==0||e.pointerType==='touch'||e.target.closest('input'))return;
     const cell=cellAt(e.target);if(!cell)return;
     e.preventDefault();range={first:cell,last:cell};dragging=true;suppressClick=true;highlight();
   },true);
@@ -194,7 +210,7 @@
   document.addEventListener('pointercancel',()=>{dragging=false});
   window.addEventListener('blur',()=>{dragging=false});
   document.addEventListener('click',e=>{
-    if(!suppressClick||!cellAt(e.target))return;
+    if(!suppressClick||!cellAt(e.target)||e.target.closest('input'))return;
     e.preventDefault();e.stopImmediatePropagation();suppressClick=false;
   },true);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){range=null;dragging=false;highlight()}});
@@ -206,14 +222,15 @@
     const dates=scheduleDates(scheduleSettings().start,scheduleDays(scheduleSettings().type));
     const previousTasks=data.schedule.slice(),previousLines=data.scheduleLines.slice();
     const form=document.querySelector('#scheduleLineForm');
-    for(let r=Math.min(a,b);r<=Math.max(a,b);r++){
+    const isR=(form?.elements.style.value||'').startsWith('r');
+    for(let r=Math.min(a,b);r<=(isR?Math.min(a,b):Math.max(a,b));r++){
       const row=rows[r];let taskId=row.dataset.gridTask;
       if(!taskId){
         taskId=uid();
-        data.schedule.push({id:taskId,projectId,title:'工程'+(Number(row.dataset.gridSlot)+1),start:dates[left],end:dates[right],note:'',gridSlot:Number(row.dataset.gridSlot)});
+        data.schedule.push({id:taskId,projectId,title:'',gridOnly:true,start:dates[left],end:dates[right],note:'',gridSlot:Number(row.dataset.gridSlot)});
       }
-      if(data.scheduleLines.some(l=>l.projectId===projectId&&l.taskId===taskId&&l.cellBottom&&l.start===dates[left]&&l.end===dates[right]))continue;
-      data.scheduleLines.push({id:uid(),projectId,taskId,start:dates[left],end:dates[right],style:form?.elements.style.value||'solid',weight:Number(form?.elements.weight.value)||2,color:form?.elements.color.value||'#304960',startMarker:form?.elements.startMarker.value||'none',endMarker:form?.elements.endMarker.value||'none',label:form?.elements.label.value.trim().slice(0,80)||'',cellBottom:true});
+      if(data.scheduleLines.some(l=>l.projectId===projectId&&l.taskId===taskId&&l.cellBottom&&l.start===dates[left]&&l.end===dates[right]&&l.style===(form?.elements.style.value||'solid')))continue;
+      data.scheduleLines.push({id:uid(),projectId,taskId,start:dates[left],end:dates[right],style:form?.elements.style.value||'solid',weight:Number(form?.elements.weight.value)||2,color:form?.elements.color.value||'#304960',startMarker:form?.elements.startMarker.value||'none',endMarker:form?.elements.endMarker.value||'none',label:form?.elements.label.value.trim().slice(0,80)||'',cellBottom:true,rowSpan:isR?Math.abs(a-b)+1:1});
     }
     if(!save()){data.schedule=previousTasks;data.scheduleLines=previousLines;return}
     range=null;dragging=false;suppressClick=false;render();
@@ -227,6 +244,46 @@
     if(!e.target.closest('#scheduleLineForm'))return;
     const f=document.querySelector('#scheduleLineForm').elements;
     scheduleSettings().lineTools={style:f.style.value,weight:Number(f.weight.value),color:f.color.value,startMarker:f.startMarker.value,endMarker:f.endMarker.value,label:f.label.value};save();
+  });
+
+
+  document.addEventListener('change',e=>{
+    if(!e.target.matches('[data-grid-title]'))return;
+    const row=e.target.closest('tr'),slot=Number(row.dataset.gridSlot),oldTasks=data.schedule.slice();
+    let task=items('schedule').find(s=>s.id===row.dataset.gridTask);
+    if(task){data.schedule=data.schedule.map(s=>s===task?{...s,title:e.target.value}:s)}
+    else if(e.target.value.trim()){
+      task={id:uid(),projectId,title:e.target.value,start:scheduleSettings().start,end:scheduleSettings().start,note:'',gridSlot:slot,gridOnly:true};
+      data.schedule.push(task);row.dataset.gridTask=task.id;
+    }
+    if(!save()){data.schedule=oldTasks;e.target.value=task?.title||''}
+  });
+  function editCell(cell,initial){
+    const td=cell.row.children[cell.col+1];if(td.querySelector('input'))return;
+    const old=(data.scheduleCellTexts||[]).find(t=>t.projectId===projectId&&t.slot===Number(cell.row.dataset.gridSlot)&&t.date===td.dataset.gridDate)?.text||'';
+    const input=document.createElement('input');input.type='text';input.className='schedule-cell-input';input.maxLength=100;input.value=initial??old;input.setAttribute('aria-label','セルの文字');
+    td.append(input);input.focus();if(initial===undefined)input.select();
+    let cancelled=false;
+    input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){cancelled=true;input.blur()}});
+    input.addEventListener('blur',()=>{
+      if(!cancelled){
+        const previous=data.scheduleCellTexts||[];
+        data.scheduleCellTexts=previous.filter(t=>!(t.projectId===projectId&&t.slot===Number(cell.row.dataset.gridSlot)&&t.date===td.dataset.gridDate));
+        if(input.value)data.scheduleCellTexts.push({projectId,slot:Number(cell.row.dataset.gridSlot),date:td.dataset.gridDate,text:input.value});
+        if(!save())data.scheduleCellTexts=previous;
+        td.querySelector('.schedule-cell-text')?.remove();
+        const value=data.scheduleCellTexts.find(t=>t.projectId===projectId&&t.slot===Number(cell.row.dataset.gridSlot)&&t.date===td.dataset.gridDate)?.text;
+        if(value){const label=document.createElement('span');label.className='schedule-cell-text';label.textContent=value;td.append(label)}
+      }
+      input.remove();
+    },{once:true});
+  }
+  document.addEventListener('dblclick',e=>{const cell=cellAt(e.target);if(cell&&!e.target.closest('input')){e.preventDefault();editCell(cell)}});
+  document.addEventListener('keydown',e=>{
+    if(e.target.closest('input,textarea,select')||e.ctrlKey||e.metaKey||e.altKey)return;
+    if(range?.last.row.isConnected&&(e.key.length===1||e.key==='F2'||e.key==='Enter')){
+      e.preventDefault();editCell(range.last,e.key.length===1?e.key:undefined);
+    }
   });
 
   enhance();
