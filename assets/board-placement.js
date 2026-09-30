@@ -20,6 +20,7 @@ function clampBoardPreview(){
   let stage=document.querySelector('#bulkBoardStage'),overlay=document.querySelector('#bulkBoardDrag');
   if(!stage||!overlay||overlay.hidden)return;
   let photo=selectedPhotos().find(p=>p.id===bulkBoardPreviewId);if(!photo)return;
+  overlay.style.width=`${Math.min(stage.clientWidth*.43,stage.clientHeight*.8*4/3)}px`;
   let position=bulkBoardPositionFor(photo),maxX=Math.max(0,1-overlay.offsetWidth/stage.clientWidth),maxY=Math.max(0,1-overlay.offsetHeight/stage.clientHeight);
   let x=Math.max(0,Math.min(maxX,position.xRatio)),y=Math.max(0,Math.min(maxY,position.yRatio));
   overlay.style.left=`${x*100}%`;overlay.style.top=`${y*100}%`;bulkBoardPositions.set(photo.id,{xRatio:x,yRatio:y});
@@ -144,3 +145,4 @@ async function saveBulkBoardPhotos(e){
     console.error('後付け黒板の保存に失敗',error);alert(error.message||'黒板合成画像を保存できませんでした');
   }finally{if(button){button.disabled=false;button.textContent='保存'}}
 }
+
