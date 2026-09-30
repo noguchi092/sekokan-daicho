@@ -47,16 +47,66 @@
       });
     });
   }
+  let activeResizeObserver;
   function enhance(){
     const sheet=document.querySelector('.schedule-sheet');
     if(!sheet||sheet.dataset.excelLayout==='1')return;
     sheet.dataset.excelLayout='1';
     sheet.classList.add('excel-layout');
-    sheet.prepend(buildMeta(sheet));
     enhanceHeader(sheet);
+    const scroll=sheet.querySelector('.schedule-scroll');
+    const table=sheet.querySelector('.schedule-grid');
+    if(!scroll||!table)return;
+    const canvas=document.createElement('div');
+    canvas.className='excel-schedule-canvas';
+    scroll.prepend(canvas);
+    canvas.append(buildMeta(sheet),sheet.querySelector('.section-head'),table);
+    const dayHeaders=[...table.querySelectorAll('thead tr:last-child th')].slice(1,-1);
+    const body=table.querySelector('tbody');
+    if(body.children.length===1&&body.firstElementChild.children.length===1)body.replaceChildren();
+    const rows=body.querySelectorAll('tr:not(.schedule-annotation)').length;
+    const dates=typeof scheduleSettings==='function'?scheduleDates(scheduleSettings().start,dayHeaders.length):[];
+    for(let i=rows;i<20;i++){
+      const row=document.createElement('tr');
+      row.className='schedule-empty-row';
+      row.innerHTML=`<th class="schedule-sticky"><button type="button" class="schedule-empty-add" data-schedule-empty="" aria-label="工程を追加">＋ 工程を記入</button></th>${dayHeaders.map((th,n)=>`<td class="${th.classList.contains('holiday')?'holiday':''} ${th.classList.contains('saturday')?'saturday':''}"><button type="button" class="schedule-day-pick" data-schedule-empty="${esc(dates[n]||'')}" aria-label="${esc(dates[n]||'')}の工程を追加"></button></td>`).join('')}<td></td>`;
+      body.append(row);
+    }
+    const columns=document.createElement('colgroup');
+    columns.innerHTML='<col class="excel-label-column">'+dayHeaders.map(()=>'<col class="excel-day-column">').join('')+'<col class="excel-actions-column">';
+    table.prepend(columns);
+    const fit=()=>{
+      if(!sheet.isConnected)return;
+      const label=matchMedia('(max-width:900px)').matches?150:190,actions=90;
+      const available=scroll.clientWidth;
+      if(!available)return;
+      const day=Math.max(30,(available-label-actions)/dayHeaders.length);
+      const width=label+actions+day*dayHeaders.length;
+      canvas.style.width=width+'px';
+      canvas.style.setProperty('--excel-label-width',label+'px');
+      canvas.style.setProperty('--excel-day-width',day+'px');
+      canvas.style.setProperty('--excel-actions-width',actions+'px');
+      table.querySelectorAll('.schedule-line-svg').forEach(svg=>{
+        svg.setAttribute('preserveAspectRatio','none');
+        svg.style.width='100%';
+      });
+    };
+    fit();
+    if(activeResizeObserver)activeResizeObserver.disconnect();
+    activeResizeObserver=new ResizeObserver(fit);
+    activeResizeObserver.observe(scroll);
   }
   const observer=new MutationObserver(()=>requestAnimationFrame(enhance));
   observer.observe(document.documentElement,{subtree:true,childList:true});
   document.addEventListener('change',e=>{if(e.target?.id==='projectSelect')setTimeout(enhance,0)});
+  document.addEventListener('click',e=>{
+    const button=e.target.closest('[data-schedule-empty]');
+    if(!button)return;
+    openForm('schedule');
+    const date=button.dataset.scheduleEmpty||scheduleSettings().start;
+    document.querySelector('#entryForm [name=start]').value=date;
+    document.querySelector('#entryForm [name=end]').value=date;
+    document.querySelector('#entryForm [name=title]')?.focus();
+  });
   enhance();
 })();
