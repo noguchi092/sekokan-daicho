@@ -24,3 +24,18 @@
 .schedule-sheet.excel-layout .schedule-grid td.schedule-range-selected{box-shadow:inset 0 0 0 2px #087c83;background:#bce6ef}
 .schedule-cell-bottom-line{position:absolute;left:0;right:-1px;bottom:0;border-bottom:2px solid #304960;pointer-events:none;z-index:3}
 .schedule-annotation[hidden]{display:none!important}
+
+.schedule-addin-toolbar{position:sticky;top:0;z-index:10;margin:12px 0;padding:10px 12px;background:#f7f9fb;border:1px solid #a7b8c5;border-radius:5px}
+.schedule-addin-toolbar form{display:flex;align-items:end;flex-wrap:wrap;gap:8px}
+.schedule-addin-toolbar label{display:grid;gap:3px;font-size:12px;color:#304960}
+.schedule-addin-toolbar select,.schedule-addin-toolbar input{border:1px solid #a7b8c5;border-radius:3px;background:white;padding:5px;height:32px;box-sizing:border-box;font-size:13px}
+.schedule-addin-toolbar input[type=color]{width:45px;padding:2px}
+.schedule-tool-label{flex:1;min-width:120px;max-width:240px}
+.schedule-tool-label input{width:100%}
+.schedule-tool-buttons{display:flex;gap:6px}
+.schedule-addin-toolbar .btn{padding:6px 10px;min-height:32px;font-size:12px;border-radius:3px}
+.schedule-addin-toolbar .hint:empty{display:none}
+.schedule-addin-toolbar .hint{display:block;margin:5px 0 0}
+.schedule-cell-line-layer{position:absolute;left:0;bottom:0;height:34px;width:var(--excel-date-width);pointer-events:none;z-index:5}
+.schedule-cell-line-layer svg{width:100%;height:100%;display:block;overflow:visible}
+@media(max-width:600px){.schedule-addin-toolbar{position:relative}.schedule-tool-buttons{width:100%}}
