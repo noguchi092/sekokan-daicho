@@ -164,3 +164,7 @@
 
 .board-folder-visual{margin-bottom:16px;min-height:0}
 .board-folder-visual .visual-folder-card:focus-visible{outline:2px solid #167772;outline-offset:2px}
+
+.visual-folder-card.visual-folder-add{align-items:center;justify-content:center;text-align:center;border:2px dashed #a9c7cb;background:#f9fcfc;color:#087c83;min-height:112px}
+.visual-folder-card.visual-folder-add:hover,.visual-folder-card.visual-folder-add:focus-visible{border-color:#087c83;background:#e8f6f4;outline:none}
+.visual-folder-plus{font-size:36px;font-weight:400;line-height:1}
