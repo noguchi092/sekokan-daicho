@@ -47,19 +47,30 @@
       });
     });
   }
+  function cellAlignment(slot,date){
+    return (data.scheduleCellFormats||[]).find(f=>f.projectId===projectId&&f.slot===slot&&f.date===date)?.align||'left';
+  }
   function refreshTextOverflow(row){
-    const cells=[...row.children].slice(1,-1);
+    const cells=[...row.children].slice(1,-1),slot=Number(row.dataset.gridSlot);
     for(let i=0;i<cells.length;i++){
       const text=cells[i].querySelector('.schedule-cell-text');
       const input=cells[i].querySelector('.schedule-cell-input');
       if(!text&&!input)continue;
-      let stop=i+1;
-      while(stop<cells.length&&!cells[stop].querySelector('.schedule-cell-text,.schedule-cell-input'))stop++;
-      const left=cells[i].getBoundingClientRect().left;
-      const edge=stop<cells.length?cells[stop].getBoundingClientRect().left:cells.at(-1).getBoundingClientRect().right;
-      const width=Math.max(0,edge-left-1)+'px';
-      if(text){text.style.width=width;text.title=text.textContent}
-      if(input)input.style.width=width;
+      let first=i,last=i;
+      while(first>0&&!cells[first-1].querySelector('.schedule-cell-text,.schedule-cell-input'))first--;
+      while(last+1<cells.length&&!cells[last+1].querySelector('.schedule-cell-text,.schedule-cell-input'))last++;
+      const rect=cells[i].getBoundingClientRect(),align=cellAlignment(slot,cells[i].dataset.gridDate);
+      const availableLeft=rect.left-cells[first].getBoundingClientRect().left;
+      const availableRight=cells[last].getBoundingClientRect().right-rect.right;
+      const extension=align==='center'?Math.min(availableLeft,availableRight):0;
+      const offset=align==='right'?-availableLeft:align==='center'?-extension:0;
+      const width=rect.width+(align==='right'?availableLeft:align==='center'?extension*2:availableRight)-1;
+      for(const element of [text,input]){
+        if(!element)continue;
+        element.style.width=Math.max(0,width)+'px';element.style.left=offset+'px';
+        element.style.textAlign=align;
+        if(element===text){element.style.justifyContent=align==='right'?'flex-end':align==='center'?'center':'flex-start';element.title=element.textContent}
+      }
     }
   }
   let activeResizeObserver;
@@ -107,6 +118,7 @@
       row.dataset.gridSlot=slot;
       const entry=items('schedule').find(s=>s.id===row.dataset.gridTask);
       row.firstElementChild.innerHTML=`<input class="schedule-title-input" data-grid-title type="text" value="${esc(entry?.title||'')}" aria-label="工程名 ${slot+1}" maxlength="100">`;
+      row.querySelector('[data-grid-title]').style.textAlign=cellAlignment(slot,'title');
       [...row.children].slice(1,-1).forEach((td,col)=>{
         td.dataset.gridDate=dates[col];
         const value=(data.scheduleCellTexts||[]).find(t=>t.projectId===projectId&&t.slot===slot&&t.date===dates[col])?.text;
@@ -148,6 +160,12 @@
         }
       }
     }
+    body.querySelectorAll('tr:not(.schedule-annotation)').forEach(row=>{
+      const cell=row.lastElementChild,actions=document.createElement('div');
+      actions.className='schedule-row-actions';
+      while(cell.firstChild)actions.append(cell.firstChild);
+      cell.append(actions);
+    });
     const hint=document.querySelector('.schedule-toolbar .hint');
     if(hint)hint.textContent='工程名は直接入力。日付セルはダブルクリック、または選択して文字入力。左ドラッグ→右クリックで線。R線は選択範囲の上下の交点を結びます。';
     const columns=document.createElement('colgroup');
@@ -195,7 +213,7 @@
     document.querySelector('#entryForm [name=title]')?.focus();
   });
 
-  let range=null,dragging=false,suppressClick=false;
+  let range=null,dragging=false,suppressClick=false,selectedTitleRow=null;
   const cellAt=target=>{
     const td=target.closest('.schedule-grid tbody tr:not(.schedule-annotation)>td');
     if(!td||td===td.parentElement.lastElementChild)return null;
@@ -213,6 +231,7 @@
   document.addEventListener('pointerdown',e=>{
     if(e.button!==0||e.pointerType==='touch'||e.target.closest('input'))return;
     const cell=cellAt(e.target);if(!cell)return;
+    selectedTitleRow=null;
     e.preventDefault();range={first:cell,last:cell};dragging=true;suppressClick=true;highlight();
   },true);
   document.addEventListener('pointermove',e=>{
@@ -300,6 +319,41 @@
     if(range?.last.row.isConnected&&(e.key.length===1||e.key==='F2'||e.key==='Enter')){
       e.preventDefault();editCell(range.last,e.key.length===1?e.key:undefined);
     }
+  });
+
+
+  document.addEventListener('focusin',e=>{
+    if(e.target.matches('[data-grid-title]')){
+      selectedTitleRow=e.target.closest('tr');range=null;highlight();
+    }
+  });
+  document.addEventListener('click',e=>{
+    const button=e.target.closest('[data-grid-align]');if(!button)return;
+    const align=button.dataset.gridAlign;
+    if(!['left','center','right'].includes(align))return;
+    const previous=data.scheduleCellFormats||[],next=previous.slice(),targets=[];
+    if(selectedTitleRow?.isConnected)targets.push({row:selectedTitleRow,date:'title'});
+    else if(range?.first.row.isConnected){
+      const rows=[...range.first.row.parentElement.querySelectorAll('tr:not(.schedule-annotation)')];
+      const a=rows.indexOf(range.first.row),b=rows.indexOf(range.last.row);
+      for(let r=Math.min(a,b);r<=Math.max(a,b);r++)
+        for(let c=Math.min(range.first.col,range.last.col);c<=Math.max(range.first.col,range.last.col);c++)
+          targets.push({row:rows[r],date:rows[r].children[c+1].dataset.gridDate});
+    }
+    if(!targets.length){document.querySelector('#schedulePickStatus').textContent='配置を変えるセルを選択してください';return}
+    for(const target of targets){
+      const slot=Number(target.row.dataset.gridSlot);
+      const index=next.findIndex(f=>f.projectId===projectId&&f.slot===slot&&f.date===target.date);
+      const format={projectId,slot,date:target.date,align};
+      if(index>=0)next[index]=format;else next.push(format);
+    }
+    data.scheduleCellFormats=next;
+    if(!save()){data.scheduleCellFormats=previous;return}
+    for(const row of new Set(targets.map(t=>t.row))){
+      row.querySelector('[data-grid-title]').style.textAlign=cellAlignment(Number(row.dataset.gridSlot),'title');
+      refreshTextOverflow(row);
+    }
+    document.querySelectorAll('[data-grid-align]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
   });
 
   enhance();
