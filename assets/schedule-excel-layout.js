@@ -47,6 +47,21 @@
       });
     });
   }
+  function refreshTextOverflow(row){
+    const cells=[...row.children].slice(1,-1);
+    for(let i=0;i<cells.length;i++){
+      const text=cells[i].querySelector('.schedule-cell-text');
+      const input=cells[i].querySelector('.schedule-cell-input');
+      if(!text&&!input)continue;
+      let stop=i+1;
+      while(stop<cells.length&&!cells[stop].querySelector('.schedule-cell-text,.schedule-cell-input'))stop++;
+      const left=cells[i].getBoundingClientRect().left;
+      const edge=stop<cells.length?cells[stop].getBoundingClientRect().left:cells.at(-1).getBoundingClientRect().right;
+      const width=Math.max(0,edge-left-1)+'px';
+      if(text){text.style.width=width;text.title=text.textContent}
+      if(input)input.style.width=width;
+    }
+  }
   let activeResizeObserver;
   function enhance(){
     const sheet=document.querySelector('.schedule-sheet');
@@ -151,6 +166,7 @@
       canvas.style.setProperty('--excel-actions-width',actions+'px');
       canvas.style.setProperty('--excel-date-width',(day*dayHeaders.length)+'px');
       const allRows=[...body.querySelectorAll('tr:not(.schedule-annotation)')];
+      allRows.forEach(refreshTextOverflow);
       table.querySelectorAll('.schedule-cell-line-layer').forEach(layer=>{
         const row=layer.closest('tr'),index=allRows.indexOf(row),last=allRows[Math.min(allRows.length-1,index+Number(layer.dataset.rowSpan)-1)];
         layer.style.top='0px';layer.style.bottom='auto';
@@ -262,7 +278,7 @@
     const td=cell.row.children[cell.col+1];if(td.querySelector('input'))return;
     const old=(data.scheduleCellTexts||[]).find(t=>t.projectId===projectId&&t.slot===Number(cell.row.dataset.gridSlot)&&t.date===td.dataset.gridDate)?.text||'';
     const input=document.createElement('input');input.type='text';input.className='schedule-cell-input';input.maxLength=100;input.value=initial??old;input.setAttribute('aria-label','セルの文字');
-    td.append(input);input.focus();if(initial===undefined)input.select();
+    td.append(input);refreshTextOverflow(cell.row);input.focus();if(initial===undefined)input.select();
     let cancelled=false;
     input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){cancelled=true;input.blur()}});
     input.addEventListener('blur',()=>{
@@ -275,7 +291,7 @@
         const value=data.scheduleCellTexts.find(t=>t.projectId===projectId&&t.slot===Number(cell.row.dataset.gridSlot)&&t.date===td.dataset.gridDate)?.text;
         if(value){const label=document.createElement('span');label.className='schedule-cell-text';label.textContent=value;td.append(label)}
       }
-      input.remove();
+      input.remove();refreshTextOverflow(cell.row);
     },{once:true});
   }
   document.addEventListener('dblclick',e=>{const cell=cellAt(e.target);if(cell&&!e.target.closest('input')){e.preventDefault();editCell(cell)}});
