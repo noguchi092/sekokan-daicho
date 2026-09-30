@@ -177,7 +177,7 @@ function renderSchedule(){
   const selected=editing||tools;
   const lineEditor=`<section class="card schedule-addin-toolbar" id="scheduleLineEditor" aria-label="工程線ツールバー"><form id="scheduleLineForm">
     <input type="hidden" name="taskId" value="${esc(task)}"><input type="hidden" name="start" value="${esc(start)}"><input type="hidden" name="end" value="${esc(end)}">
-    <label>線種<select name="style">${options([['solid','━ 実線'],['dashed','┄ 破線'],['dotted','┈ 点線'],['r-right-up','右上がりR'],['r-right-down','右下がりR'],['r-left-up','左上がりR'],['r-left-down','左下がりR']],selected.style||'solid')}</select></label>
+    <label>線種<select name="style">${options([['solid','━ 実線'],['dashed','┄ 破線'],['dotted','┈ 点線'],['r-right-up','┛ R線'],['r-right-down','┓ R線'],['r-left-up','┗ R線'],['r-left-down','┏ R線']],selected.style||'solid')}</select></label>
     <label>太さ<select name="weight">${options([['1','細い'],['2','標準'],['3','太い']],String(selected.weight||2))}</select></label>
     <label>色<input type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(selected.color)?selected.color:'#304960'}"></label>
     <label>始点<select name="startMarker">${options([['none','なし'],['open','○ 白丸'],['filled','● 黒丸'],['arrow','← 矢印']],selected.startMarker||'none')}</select></label>
