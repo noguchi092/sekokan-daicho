@@ -152,7 +152,7 @@
           const g=curved?scheduleCornerGeometry(line.style==='r'?'r-right-up':line.style,left,right,height):{path:`M ${left} ${height} H ${right}`,sx:left,sy:height,ex:right,ey:height,startAngle:0,endAngle:0};
           const dash=line.style==='dashed'?'9 5':line.style==='dotted'?'2 5':'';
           const layer=document.createElement('span');layer.className='schedule-cell-line-layer';
-          layer.dataset.rowSpan=curved?span:1;
+          layer.dataset.rowSpan=curved?span:1;layer.dataset.lineId=line.id;
           const marker=(kind,x,y,side,angle)=>`<g transform="rotate(${angle} ${x} ${y})">${scheduleMarker(kind,x,y,color,side)}</g>`;
           layer.innerHTML=`<svg viewBox="0 0 ${dates.length*52} ${height}" preserveAspectRatio="none" aria-label="${esc(line.label||'工程線')}"><path d="${g.path}" fill="none" stroke="${color}" stroke-width="${line.weight||2}" vector-effect="non-scaling-stroke" ${dash?`stroke-dasharray="${dash}"`:''}/>${first>=0?marker(line.startMarker,g.sx,g.sy,'start',g.startAngle):''}${last>=0?marker(line.endMarker,g.ex,g.ey,'end',g.endAngle):''}${line.label?`<text x="${(left+right)/2}" y="${Math.max(12,g.sy-8)}" text-anchor="middle" fill="${color}" font-size="12">${esc(line.label)}</text>`:''}</svg>`;
           cells[0].append(layer);
@@ -196,6 +196,7 @@
       });
     };
     fit();
+    setupLinePicking(sheet);
     if(activeResizeObserver)activeResizeObserver.disconnect();
     activeResizeObserver=new ResizeObserver(fit);
     activeResizeObserver.observe(scroll);
@@ -213,7 +214,29 @@
     document.querySelector('#entryForm [name=title]')?.focus();
   });
 
-  let range=null,dragging=false,suppressClick=false,selectedTitleRow=null;
+  let range=null,dragging=false,suppressClick=false,selectedTitleRow=null,selectedLineId='';
+  function selectLine(id){
+    selectedLineId=id;
+    document.querySelectorAll('[data-pick-line]').forEach(hit=>{
+      const active=hit.dataset.pickLine===id;
+      hit.setAttribute('aria-pressed',String(active));
+      hit.closest('svg').classList.toggle('schedule-selected-line',active);
+    });
+    if(id){range=null;highlight();const status=document.querySelector('#schedulePickStatus');if(status)status.textContent='工程線を選択しました。Deleteキーで削除できます。';}
+  }
+  function setupLinePicking(sheet){
+    sheet.querySelectorAll('.schedule-cell-line-layer svg,.schedule-annotation .schedule-line-svg').forEach(svg=>{
+      const id=svg.closest('[data-line-id]')?.dataset.lineId||svg.closest('tr')?.querySelector('[data-schedule-line-edit]')?.dataset.scheduleLineEdit;
+      const path=svg.querySelector('path');
+      if(!id||!path||svg.querySelector('[data-pick-line]'))return;
+      const hit=path.cloneNode(false);
+      hit.removeAttribute('stroke-dasharray');hit.removeAttribute('class');
+      hit.setAttribute('fill','none');hit.setAttribute('stroke','transparent');hit.setAttribute('stroke-width','14');hit.setAttribute('vector-effect','non-scaling-stroke');
+      hit.setAttribute('class','schedule-line-hit');hit.setAttribute('tabindex','0');hit.setAttribute('role','button');hit.setAttribute('aria-label','工程線を選択（Deleteキーで削除）');hit.setAttribute('aria-pressed','false');
+      hit.dataset.pickLine=id;svg.append(hit);
+    });
+    selectLine(selectedLineId);
+  }
   const cellAt=target=>{
     const td=target.closest('.schedule-grid tbody tr:not(.schedule-annotation)>td');
     if(!td||td===td.parentElement.lastElementChild)return null;
@@ -230,8 +253,9 @@
   }
   document.addEventListener('pointerdown',e=>{
     if(e.button!==0||e.pointerType==='touch'||e.target.closest('input'))return;
+    const hit=e.target.closest('[data-pick-line]');if(hit){e.preventDefault();e.stopImmediatePropagation();selectLine(hit.dataset.pickLine);hit.focus();return}
     const cell=cellAt(e.target);if(!cell)return;
-    selectedTitleRow=null;
+    selectLine('');selectedTitleRow=null;
     e.preventDefault();range={first:cell,last:cell};dragging=true;suppressClick=true;highlight();
   },true);
   document.addEventListener('pointermove',e=>{
@@ -355,6 +379,26 @@
     }
     document.querySelectorAll('[data-grid-align]').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
   });
+
+
+  document.addEventListener('focusin',e=>{const hit=e.target.closest('[data-pick-line]');if(hit)selectLine(hit.dataset.pickLine)});
+  document.addEventListener('click',e=>{
+    const hit=e.target.closest('[data-pick-line]');if(!hit)return;
+    e.preventDefault();e.stopImmediatePropagation();selectLine(hit.dataset.pickLine);
+  },true);
+  document.addEventListener('keydown',e=>{
+    if(e.target.closest('input,textarea,select,[contenteditable=true]'))return;
+    if(e.key==='Escape'){selectLine('');return}
+    if(e.key!=='Delete'||!selectedLineId)return;
+    const line=data.scheduleLines.find(l=>l.id===selectedLineId&&l.projectId===projectId);
+    if(!line){selectLine('');return}
+    e.preventDefault();e.stopImmediatePropagation();
+    const previous=data.scheduleLines;
+    data.scheduleLines=previous.filter(l=>l!==line);
+    if(!save()){data.scheduleLines=previous;return}
+    selectedLineId='';range=null;dragging=false;render();
+    requestAnimationFrame(()=>{const status=document.querySelector('#schedulePickStatus');if(status)status.textContent='選択した工程線を削除しました。';});
+  },true);
 
   enhance();
 })();
