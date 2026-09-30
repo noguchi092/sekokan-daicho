@@ -104,28 +104,27 @@
         }
         for(const line of scheduleLines().filter(l=>l.taskId===task&&l.cellBottom)){
           const remove=document.createElement('button');remove.type='button';remove.className='btn danger';
-          remove.dataset.scheduleLineDelete=line.id;remove.textContent='線を削除';
+          remove.dataset.scheduleLineDelete=line.id;remove.textContent='× 線';
           remove.title=line.start+' ～ '+line.end;
           row.lastElementChild.append(remove);
         }
         const cells=[...row.children].slice(1,-1);
         for(const line of scheduleLines().filter(l=>l.taskId===task&&l.cellBottom)){
+          if(line.end<dates[0]||line.start>dates.at(-1))continue;
           const first=dates.indexOf(line.start),last=dates.indexOf(line.end);
-          const from=Math.max(0,first<0&&line.start<dates[0]?0:first);
-          const to=Math.min(dates.length-1,last<0&&line.end>dates.at(-1)?dates.length-1:last);
-          if(line.end<dates[0]||line.start>dates.at(-1)||to<from)continue;
-          for(let col=from;col<=to;col++){
-            const mark=document.createElement('span');mark.className='schedule-cell-bottom-line';
-            mark.style.borderBottomColor=line.color||'#304960';
-            mark.style.borderBottomWidth=(line.weight||2)+'px';
-            mark.style.borderBottomStyle=line.style==='dotted'?'dotted':line.style==='dashed'?'dashed':'solid';
-            cells[col].append(mark);
-          }
+          const from=first<0?0:first,to=last<0?dates.length-1:last;
+          const left=from*52+4,right=(to+1)*52-4,y=29,color=/^#[0-9a-f]{6}$/i.test(line.color)?line.color:'#304960';
+          const path=line.style==='r'?`M ${left} ${y} Q ${(left+right)/2} 2 ${right} ${y}`:`M ${left} ${y} L ${right} ${y}`;
+          const dash=line.style==='dashed'?'9 5':line.style==='dotted'?'2 5':'';
+          const layer=document.createElement('span');layer.className='schedule-cell-line-layer';
+          layer.innerHTML=`<svg viewBox="0 0 ${dates.length*52} 34" preserveAspectRatio="none" aria-label="${esc(line.label||'工程線')}"><path d="${path}" fill="none" stroke="${color}" stroke-width="${line.weight||2}" vector-effect="non-scaling-stroke" ${dash?`stroke-dasharray="${dash}"`:''}/>${first>=0?scheduleMarker(line.startMarker,left,y,color,'start'):''}${last>=0?scheduleMarker(line.endMarker,right,y,color,'end'):''}${line.label?`<text x="${(left+right)/2}" y="12" text-anchor="middle" fill="${color}" font-size="12">${esc(line.label)}</text>`:''}</svg>`;
+          cells[0].append(layer);
+          const edit=document.createElement('button');edit.type='button';edit.className='btn secondary';edit.dataset.scheduleLineEdit=line.id;edit.textContent='線編集';row.lastElementChild.append(edit);
         }
       }
     }
     const hint=document.querySelector('.schedule-toolbar .hint');
-    if(hint)hint.textContent='左ドラッグでセル範囲を選択 → 右クリックで下端に工程線。Escで選択解除。線は行右端のボタンから削除できます。';
+    if(hint)hint.textContent='左ドラッグでセル範囲を選択 → 右クリックで下端に工程線。Escで選択解除。上のバーで線種・色・端点を選べます。';
     const columns=document.createElement('colgroup');
     columns.innerHTML='<col class="excel-label-column">'+dayHeaders.map(()=>'<col class="excel-day-column">').join('')+'<col class="excel-actions-column">';
     table.prepend(columns);
@@ -140,6 +139,7 @@
       canvas.style.setProperty('--excel-label-width',label+'px');
       canvas.style.setProperty('--excel-day-width',day+'px');
       canvas.style.setProperty('--excel-actions-width',actions+'px');
+      canvas.style.setProperty('--excel-date-width',(day*dayHeaders.length)+'px');
       table.querySelectorAll('.schedule-line-svg').forEach(svg=>{
         svg.setAttribute('preserveAspectRatio','none');
         svg.style.width='100%';
@@ -198,9 +198,7 @@
     e.preventDefault();e.stopImmediatePropagation();suppressClick=false;
   },true);
   document.addEventListener('keydown',e=>{if(e.key==='Escape'){range=null;dragging=false;highlight()}});
-  document.addEventListener('contextmenu',e=>{
-    const cell=cellAt(e.target);if(!cell)return;
-    e.preventDefault();
+  function drawRange(cell){
     if(!range||!range.first.row.isConnected){range={first:cell,last:cell};highlight()}
     const rows=[...cell.row.parentElement.querySelectorAll('tr:not(.schedule-annotation)')];
     const a=rows.indexOf(range.first.row),b=rows.indexOf(range.last.row);
@@ -215,10 +213,20 @@
         data.schedule.push({id:taskId,projectId,title:'工程'+(Number(row.dataset.gridSlot)+1),start:dates[left],end:dates[right],note:'',gridSlot:Number(row.dataset.gridSlot)});
       }
       if(data.scheduleLines.some(l=>l.projectId===projectId&&l.taskId===taskId&&l.cellBottom&&l.start===dates[left]&&l.end===dates[right]))continue;
-      data.scheduleLines.push({id:uid(),projectId,taskId,start:dates[left],end:dates[right],style:form?.elements.style.value||'solid',weight:Number(form?.elements.weight.value)||2,color:form?.elements.color.value||'#304960',startMarker:'none',endMarker:'none',label:'',cellBottom:true});
+      data.scheduleLines.push({id:uid(),projectId,taskId,start:dates[left],end:dates[right],style:form?.elements.style.value||'solid',weight:Number(form?.elements.weight.value)||2,color:form?.elements.color.value||'#304960',startMarker:form?.elements.startMarker.value||'none',endMarker:form?.elements.endMarker.value||'none',label:form?.elements.label.value.trim().slice(0,80)||'',cellBottom:true});
     }
     if(!save()){data.schedule=previousTasks;data.scheduleLines=previousLines;return}
     range=null;dragging=false;suppressClick=false;render();
+  }
+  document.addEventListener('contextmenu',e=>{const cell=cellAt(e.target);if(!cell)return;e.preventDefault();drawRange(cell)});
+  document.addEventListener('click',e=>{
+    if(e.target.closest('[data-grid-clear]')){range=null;dragging=false;highlight()}
+    if(e.target.closest('[data-grid-draw]')){if(range?.first.row.isConnected)drawRange(range.first);else document.querySelector('#schedulePickStatus').textContent='先にセルをドラッグして選択してください';}
+  });
+  document.addEventListener('change',e=>{
+    if(!e.target.closest('#scheduleLineForm'))return;
+    const f=document.querySelector('#scheduleLineForm').elements;
+    scheduleSettings().lineTools={style:f.style.value,weight:Number(f.weight.value),color:f.color.value,startMarker:f.startMarker.value,endMarker:f.endMarker.value,label:f.label.value};save();
   });
 
   enhance();
