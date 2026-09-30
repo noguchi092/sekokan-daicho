@@ -47,6 +47,10 @@
       });
     });
   }
+  function cellTextColor(slot,date){
+    const color=(data.scheduleCellFormats||[]).find(f=>f.projectId===projectId&&f.slot===slot&&f.date===date)?.color;
+    return /^#[0-9a-f]{6}$/i.test(color)?color:'#172530';
+  }
   function cellAlignment(slot,date){
     return (data.scheduleCellFormats||[]).find(f=>f.projectId===projectId&&f.slot===slot&&f.date===date)?.align||'left';
   }
@@ -68,7 +72,7 @@
       for(const element of [text,input]){
         if(!element)continue;
         element.style.width=Math.max(0,width)+'px';element.style.left=offset+'px';
-        element.style.textAlign=align;
+        element.style.textAlign=align;element.style.color=cellTextColor(slot,cells[i].dataset.gridDate);
         if(element===text){element.style.justifyContent=align==='right'?'flex-end':align==='center'?'center':'flex-start';element.title=element.textContent}
       }
     }
@@ -119,6 +123,7 @@
       const entry=items('schedule').find(s=>s.id===row.dataset.gridTask);
       row.firstElementChild.innerHTML=`<input class="schedule-title-input" data-grid-title type="text" value="${esc(entry?.title||'')}" aria-label="工程名 ${slot+1}" maxlength="100">`;
       row.querySelector('[data-grid-title]').style.textAlign=cellAlignment(slot,'title');
+      row.querySelector('[data-grid-title]').style.color=cellTextColor(slot,'title');
       [...row.children].slice(1,-1).forEach((td,col)=>{
         td.dataset.gridDate=dates[col];
         const value=(data.scheduleCellTexts||[]).find(t=>t.projectId===projectId&&t.slot===slot&&t.date===dates[col])?.text;
@@ -222,7 +227,7 @@
       hit.setAttribute('aria-pressed',String(active));
       hit.closest('svg').classList.toggle('schedule-selected-line',active);
     });
-    if(id){range=null;highlight();const status=document.querySelector('#schedulePickStatus');if(status)status.textContent='工程線を選択しました。Deleteキーで削除できます。';}
+    if(id){selectedTitleRow=null;const line=scheduleLines().find(l=>l.id===id);const input=document.querySelector('#scheduleLineForm [name=color]');if(line&&input)input.value=line.color||'#304960';range=null;highlight();const status=document.querySelector('#schedulePickStatus');if(status)status.textContent='工程線を選択しました。Deleteキーで削除できます。';}
   }
   function setupLinePicking(sheet){
     sheet.querySelectorAll('.schedule-cell-line-layer svg,.schedule-annotation .schedule-line-svg').forEach(svg=>{
@@ -301,6 +306,7 @@
   });
   document.addEventListener('change',e=>{
     if(!e.target.closest('#scheduleLineForm'))return;
+    if(e.target.name==='color'){applySelectionColor(e.target.value);return}
     const f=document.querySelector('#scheduleLineForm').elements;
     scheduleSettings().lineTools={style:f.style.value,weight:Number(f.weight.value),color:f.color.value,startMarker:f.startMarker.value,endMarker:f.endMarker.value,label:f.label.value};save();
   });
@@ -348,7 +354,7 @@
 
   document.addEventListener('focusin',e=>{
     if(e.target.matches('[data-grid-title]')){
-      selectedTitleRow=e.target.closest('tr');range=null;highlight();
+      selectLine('');selectedTitleRow=e.target.closest('tr');range=null;highlight();
     }
   });
   document.addEventListener('click',e=>{
@@ -368,7 +374,7 @@
     for(const target of targets){
       const slot=Number(target.row.dataset.gridSlot);
       const index=next.findIndex(f=>f.projectId===projectId&&f.slot===slot&&f.date===target.date);
-      const format={projectId,slot,date:target.date,align};
+      const format={...(index>=0?next[index]:{}),projectId,slot,date:target.date,align};
       if(index>=0)next[index]=format;else next.push(format);
     }
     data.scheduleCellFormats=next;
@@ -399,6 +405,41 @@
     selectedLineId='';range=null;dragging=false;render();
     requestAnimationFrame(()=>{const status=document.querySelector('#schedulePickStatus');if(status)status.textContent='選択した工程線を削除しました。';});
   },true);
+
+
+  function applySelectionColor(color){
+    if(!/^#[0-9a-f]{6}$/i.test(color))return;
+    const previousLines=data.scheduleLines,previousFormats=data.scheduleCellFormats||[];
+    const config=scheduleSettings(),previousTools=config.lineTools;
+    config.lineTools={...previousTools,color};
+    if(selectedLineId){
+      data.scheduleLines=previousLines.map(l=>l.id===selectedLineId&&l.projectId===projectId?{...l,color}:l);
+      if(!save()){data.scheduleLines=previousLines;config.lineTools=previousTools;return}
+      render();return;
+    }
+    const targets=[];
+    if(selectedTitleRow?.isConnected)targets.push({row:selectedTitleRow,date:'title'});
+    else if(range?.first.row.isConnected){
+      const rows=[...range.first.row.parentElement.querySelectorAll('tr:not(.schedule-annotation)')],a=rows.indexOf(range.first.row),b=rows.indexOf(range.last.row);
+      for(let r=Math.min(a,b);r<=Math.max(a,b);r++)
+        for(let c=Math.min(range.first.col,range.last.col);c<=Math.max(range.first.col,range.last.col);c++)
+          targets.push({row:rows[r],date:rows[r].children[c+1].dataset.gridDate});
+    }
+    const next=previousFormats.slice();
+    for(const target of targets){
+      const slot=Number(target.row.dataset.gridSlot),index=next.findIndex(f=>f.projectId===projectId&&f.slot===slot&&f.date===target.date);
+      const format={...(index>=0?next[index]:{}),projectId,slot,date:target.date,color};
+      if(index>=0)next[index]=format;else next.push(format);
+    }
+    data.scheduleCellFormats=next;
+    if(!save()){data.scheduleCellFormats=previousFormats;config.lineTools=previousTools;return}
+    const input=document.querySelector('#scheduleLineForm [name=color]');if(input)input.value=color;
+    for(const row of new Set(targets.map(t=>t.row))){
+      row.querySelector('[data-grid-title]').style.color=cellTextColor(Number(row.dataset.gridSlot),'title');refreshTextOverflow(row);
+    }
+    const status=document.querySelector('#schedulePickStatus');if(status)status.textContent=targets.length?'選択した文字の色を変更しました。':'新しく描く線の色を設定しました。線またはセルを選ぶと後から色を変更できます。';
+  }
+  document.addEventListener('click',e=>{const button=e.target.closest('[data-grid-color]');if(button)applySelectionColor(button.dataset.gridColor)});
 
   enhance();
 })();
