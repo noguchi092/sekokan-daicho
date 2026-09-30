@@ -183,6 +183,7 @@ function renderSchedule(){
     <label>始点<select name="startMarker">${options([['none','なし'],['open','○ 白丸'],['filled','● 黒丸'],['arrow','← 矢印']],selected.startMarker||'none')}</select></label>
     <label>終点<select name="endMarker">${options([['none','なし'],['open','○ 白丸'],['filled','● 黒丸'],['arrow','→ 矢印']],selected.endMarker||'none')}</select></label>
     <label class="schedule-tool-label">文字<input name="label" maxlength="80" placeholder="例：足場組立" value="${esc(selected.label||'')}"></label>
+    <div class="schedule-alignment-tools" role="group" aria-label="文字の配置"><button type="button" data-grid-align="left" aria-label="左寄せ" title="左寄せ">左寄せ</button><button type="button" data-grid-align="center" aria-label="中央配置" title="中央配置">中央</button><button type="button" data-grid-align="right" aria-label="右寄せ" title="右寄せ">右寄せ</button></div>
     <div class="schedule-tool-buttons"><button class="btn" type="${editing?'submit':'button'}" ${editing?'':'data-grid-draw'}>${editing?'変更を保存':'線を引く'}</button><button class="btn secondary" type="button" data-grid-clear>選択解除</button>${editing?'<button type="button" class="btn secondary" data-schedule-line-cancel>編集をやめる</button>':''}</div>
     </form><span id="schedulePickStatus" role="status" class="hint"></span></section>`;
   const dayHeader=dates.map(d=>`<th class="${new Date(d+'T12:00:00').getDay()===0?'holiday':''}">${esc(d.slice(5))}<small>${'日月火水木金土'[new Date(d+'T12:00:00').getDay()]}</small></th>`).join('');
