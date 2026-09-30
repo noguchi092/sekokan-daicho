@@ -192,6 +192,7 @@ function renderSchedule(){
     <label>線種<select name="style">${options([['solid','━ 実線'],['dashed','┄ 破線'],['dotted','┈ 点線'],['r-right-up','┛ R線'],['r-right-down','┓ R線'],['r-left-up','┗ R線'],['r-left-down','┏ R線']],selected.style||'solid')}</select></label>
     <label>太さ<select name="weight">${options([['1','細い'],['2','標準'],['3','太い']],String(selected.weight||2))}</select></label>
     <label>色<input type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(selected.color)?selected.color:'#304960'}"></label>
+    <div class="schedule-color-palette" role="group" aria-label="基本色">${[['#000000','黒'],['#ff0000','赤'],['#0000ff','青'],['#ffff00','黄'],['#00ff00','緑'],['#00ffff','水色'],['#ff00ff','紫紅'],['#ffffff','白'],['#ff8000','橙'],['#800080','紫'],['#808080','灰']].map(([color,name])=>`<button type="button" data-grid-color="${color}" style="--swatch:${color}" aria-label="${name}" title="${name}"></button>`).join('')}</div>
     <label>始点<select name="startMarker">${options([['none','なし'],['open','○ 白丸'],['filled','● 黒丸'],['arrow','← 矢印']],selected.startMarker||'none')}</select></label>
     <label>終点<select name="endMarker">${options([['none','なし'],['open','○ 白丸'],['filled','● 黒丸'],['arrow','→ 矢印']],selected.endMarker||'none')}</select></label>
     <label class="schedule-tool-label">文字<input name="label" maxlength="80" placeholder="例：足場組立" value="${esc(selected.label||'')}"></label>
