@@ -71,9 +71,10 @@
       const width=rect.width+(align==='right'?availableLeft:align==='center'?extension*2:availableRight)-1;
       for(const element of [text,input]){
         if(!element)continue;
-        element.style.width=Math.max(0,width)+'px';element.style.left=offset+'px';
+        // Editing stays inside the original cell; only saved labels spill into empty neighbors.
+        element.style.width=Math.max(0,element===input?rect.width-1:width)+'px';element.style.left=(element===input?0:offset)+'px';
         element.style.textAlign=align;element.style.color=cellTextColor(slot,cells[i].dataset.gridDate);
-        if(element===text){element.style.justifyContent=align==='right'?'flex-end':align==='center'?'center':'flex-start';element.title=element.textContent}
+        if(element===text){element.style.visibility=input?'hidden':'';element.style.justifyContent=align==='right'?'flex-end':align==='center'?'center':'flex-start';element.title=element.textContent}
       }
     }
   }
@@ -329,7 +330,7 @@
     const input=document.createElement('input');input.type='text';input.className='schedule-cell-input';input.maxLength=100;input.value=initial??old;input.setAttribute('aria-label','セルの文字');
     td.append(input);refreshTextOverflow(cell.row);input.focus();if(initial===undefined)input.select();
     let cancelled=false;
-    input.addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){cancelled=true;input.blur()}});
+    input.addEventListener('keydown',e=>{e.stopPropagation();if(e.isComposing||e.keyCode===229)return;if(e.key==='Enter'){e.preventDefault();input.blur()}if(e.key==='Escape'){cancelled=true;input.blur()}});
     input.addEventListener('blur',()=>{
       if(!cancelled){
         const previous=data.scheduleCellTexts||[];
