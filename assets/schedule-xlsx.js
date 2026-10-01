@@ -6,59 +6,121 @@
   function crc(bytes){let n=0xffffffff;for(const b of bytes)n=crcTable[(n^b)&255]^(n>>>8);return(n^0xffffffff)>>>0}
   function zip(files){let parts=[],central=[],offset=0;for(const [name,content] of Object.entries(files)){let filename=encoder.encode(name),body=encoder.encode(content),sum=crc(body),header=new Uint8Array(30+filename.length),h=new DataView(header.buffer);h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x800,true);h.setUint32(14,sum,true);h.setUint32(18,body.length,true);h.setUint32(22,body.length,true);h.setUint16(26,filename.length,true);header.set(filename,30);parts.push(header,body);let dir=new Uint8Array(46+filename.length),d=new DataView(dir.buffer);d.setUint32(0,0x02014b50,true);d.setUint16(4,20,true);d.setUint16(6,20,true);d.setUint16(8,0x800,true);d.setUint32(16,sum,true);d.setUint32(20,body.length,true);d.setUint32(24,body.length,true);d.setUint16(28,filename.length,true);d.setUint32(42,offset,true);dir.set(filename,46);central.push(dir);offset+=header.length+body.length}let size=central.reduce((n,b)=>n+b.length,0),end=new Uint8Array(22),v=new DataView(end.buffer);v.setUint32(0,0x06054b50,true);v.setUint16(8,central.length,true);v.setUint16(10,central.length,true);v.setUint32(12,size,true);v.setUint32(16,offset,true);return new Blob([...parts,...central,end],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
   function column(i){let out='';for(i++;i;i=Math.floor((i-1)/26))out=String.fromCharCode(65+(i-1)%26)+out;return out}
-  function cell(value,row,col,style=0){return `<c r="${column(col)}${row}" s="${style}" t="inlineStr"><is><t>${xml(value)}</t></is></c>`}
+  function cell(value,row,col,style=0){return value===''?`<c r="${column(col)}${row}" s="${style}"/>`:`<c r="${column(col)}${row}" s="${style}" t="inlineStr"><is><t xml:space="preserve">${xml(value)}</t></is></c>`}
 
-  function create({name,type,paper,dates,rows}){
-    const sunday=d=>new Date(d+'T12:00:00').getDay()===0;
-    const styles=new Map();
-    const styleFor=line=>{
-      const style=['solid','dashed','dotted','r'].includes(line.style)?line.style:'solid';
-      const weight=[1,2,3].includes(Number(line.weight))?Number(line.weight):2;
-      const color=/^#[0-9a-f]{6}$/i.test(line.color)?line.color.slice(1).toUpperCase():'304960';
-      const key=`${style}:${weight}:${color}`;
-      if(!styles.has(key))styles.set(key,{style,weight,color,id:4+styles.size});
-      return styles.get(key).id;
-    };
-    const marker=(kind,side)=>kind==='open'?'○':kind==='filled'?'●':kind==='arrow'?side==='start'?'◀':'▶':'';
-    const titleRow=`<row r="1">${cell(name+' / '+type,1,0,3)}${cell('用紙：'+paper,1,1,3)}</row>`;
-    const headerRow=`<row r="2" ht="29" customHeight="1">${cell('工程・項目',2,0,3)}${dates.map((d,i)=>cell(d.slice(5)+' ('+'日月火水木金土'[new Date(d+'T12:00:00').getDay()]+')',2,i+1,sunday(d)?2:3)).join('')}${cell('備考',2,dates.length+1,3)}</row>`;
-    let rowNumber=3,body='';
-    for(const task of rows){
-      const start=task.start,end=task.end;
-      body+=`<row r="${rowNumber}" ht="25" customHeight="1">${cell(task.title,rowNumber,0)}${dates.map((d,j)=>cell(d>=start&&d<=end?'■':'',rowNumber,j+1,d>=start&&d<=end?1:sunday(d)?2:0)).join('')}${cell(task.note,rowNumber,dates.length+1)}</row>`;
-      rowNumber++;
-      for(const line of task.lines||[]){
-        const first=dates.indexOf(line.start),last=dates.indexOf(line.end),kind={solid:'実線',dashed:'破線',dotted:'点線',r:'R線'}[line.style]||'実線';
-        const nameText='↳ '+(line.label||kind);
-        const note=`${kind} / ${line.start}〜${line.end}`;
-        const colorStyle=styleFor(line);
-        body+=`<row r="${rowNumber}" ht="32" customHeight="1">${cell(nameText,rowNumber,0)}${dates.map((d,j)=>{
-          let within=d>=line.start&&d<=line.end;
-          let content='';
-          if(j===first)content+=(line.style==='r'?'╭':'')+marker(line.startMarker,'start');
-          if(j===last)content+=(content?' ':'')+marker(line.endMarker,'end')+(line.style==='r'?'╮':'');
-          return cell(content,rowNumber,j+1,within?colorStyle:sunday(d)?2:0);
-        }).join('')}${cell(note,rowNumber,dates.length+1)}</row>`;
-        rowNumber++;
-      }
-    }
-    const lineBorders=[...styles.values()].map(x=>{
-      let type=x.style==='dotted'?'dotted':x.style==='dashed'?'dashed':x.weight===3?'medium':'thin';
-      return x.style==='r'?`<border><left/><right/><top style="${type}"><color rgb="FF${x.color}"/></top><bottom/><diagonal/></border>`:`<border><left/><right/><top/><bottom style="${type}"><color rgb="FF${x.color}"/></bottom><diagonal/></border>`;
-    }).join('');
-    const lineXfs=[...styles.values()].map((x,i)=>`<xf numFmtId="0" fontId="0" fillId="0" borderId="${i+1}" xfId="0" applyBorder="1"/>`).join('');
-    const stylesXml=`<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Yu Gothic"/></font><font><b/><color rgb="FFFFFFFF"/><sz val="11"/></font></fonts><fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF087C83"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFEEEE"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="${styles.size+1}"><border><left/><right/><top/><bottom/><diagonal/></border>${lineBorders}</borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styles.size+4}"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFill="1" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="0" applyFill="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFill="1" applyFont="1"/>${lineXfs}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
-    const paperSize=paper.startsWith('A1')?7:paper.startsWith('A4')?9:8;
-    const sheet=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="2" topLeftCell="B3" activePane="bottomRight" state="frozen"/></sheetView></sheetViews><cols><col min="1" max="1" width="32" customWidth="1"/><col min="2" max="${dates.length+1}" width="12" customWidth="1"/><col min="${dates.length+2}" max="${dates.length+2}" width="35" customWidth="1"/></cols><sheetData>${titleRow}${headerRow}${body}</sheetData><pageMargins left="0.25" right="0.25" top="0.4" bottom="0.4" header="0.2" footer="0.2"/><pageSetup paperSize="${paperSize}" orientation="${paper.endsWith('横')?'landscape':'portrait'}" fitToWidth="1" fitToHeight="0"/></worksheet>`;
-    const files={
-      '[Content_Types].xml':'<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>',
-      '_rels/.rels':'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
-      'xl/workbook.xml':'<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="工程表" sheetId="1" r:id="rId1"/></sheets></workbook>',
-      'xl/_rels/workbook.xml.rels':'<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
-      'xl/worksheets/sheet1.xml':sheet,
-      'xl/styles.xml':stylesXml
-    };
-    return zip(files);
+  const color=value=>/^#[0-9a-f]{6}$/i.test(value)?value:'#172530';
+  const weekday=d=>new Date(d+'T12:00:00').getDay();
+  const safe=s=>String(s||'工程表').replace(/[\\/:*?"<>|]/g,'_');
+  function captureConfig(base={}){
+    const settings=scheduleSettings(),project=data.projects.find(p=>p.id===projectId)||{},company=data.companyProfile||{};
+    const visible=[...document.querySelectorAll('.schedule-grid tbody tr[data-grid-slot]:not(.schedule-annotation)')];
+    let rows=visible.map(row=>{const task=items('schedule').find(t=>t.id===row.dataset.gridTask)||{};return {...task,slot:Number(row.dataset.gridSlot),title:row.querySelector('[data-grid-title]')?.value??task.title??'',lines:scheduleLines().filter(l=>l.taskId===task.id).map(l=>({...l}))}});
+    if(!rows.length)rows=items('schedule').map((task,i)=>({...task,slot:Number.isInteger(task.gridSlot)?task.gridSlot:i,lines:scheduleLines().filter(l=>l.taskId===task.id).map(l=>({...l}))}));
+    return {...base,...settings,name:project.constructionName||project.name||'現場',project:{...project},company:{...company},dates:scheduleDates(settings.start,scheduleDays(settings.type)),rows,cellTexts:(data.scheduleCellTexts||[]).filter(t=>t.projectId===projectId).map(t=>({...t})),cellFormats:(data.scheduleCellFormats||[]).filter(t=>t.projectId===projectId).map(t=>({...t})),created:today()};
   }
-  window.downloadScheduleXlsx=config=>{const blob=create(config),url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=`${config.type}-${config.name.replace(/[\\/:*?"<>|]/g,'_')}.xlsx`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+  function model(config){
+    const dates=config.dates||[],count=Math.max(20,...(config.rows||[]).map(r=>(r.slot??r.gridSlot??0)+1),...(config.cellTexts||[]).map(t=>t.slot+1));
+    const tasks=new Map((config.rows||[]).map((r,i)=>[r.slot??r.gridSlot??i,r]));
+    const day=Math.max(30,Math.min(140,1000/Math.max(1,dates.length))),width=190+day*dates.length,rowHeight=26,top=180;
+    const formats=new Map((config.cellFormats||[]).map(f=>[f.slot+':'+f.date,f]));
+    const texts=new Map((config.cellTexts||[]).map(t=>[t.slot+':'+t.date,t.text]));
+    const rows=Array.from({length:count},(_,slot)=>({slot,...tasks.get(slot)}));
+    const lines=[];
+    for(const row of rows)for(const line of row.lines||[]){
+      if(line.end<dates[0]||line.start>dates.at(-1))continue;
+      const first=Math.max(0,dates.findIndex(d=>d>=line.start)),last=dates.findLastIndex(d=>d<=line.end);
+      if(last<first)continue;
+      const span=(line.style||'').startsWith('r')?Math.min(Math.max(1,Number(line.rowSpan)||1),count-row.slot):1;
+      const x=190+first*day,y=top+row.slot*rowHeight,w=(last-first+1)*day,h=span*rowHeight;
+      const isLeft=(line.style||'').includes('left'),down=(line.style||'').includes('down'),r=Math.min(14,w/2,h/2),curved=(line.style||'').startsWith('r');
+      const sx=isLeft?w:0,ex=isLeft?0:w,sy=curved&&down?0:h,ey=curved?(down?h:0):h,dx=isLeft?-1:1,dy=down?1:-1;
+      lines.push({...line,x,y,w,h,sx,sy,ex,ey,r,dx,dy,curved,firstVisible:line.start>=dates[0],lastVisible:line.end<=dates.at(-1)});
+    }
+    return {config,dates,rows,lines,formats,texts,day,width,rowHeight,top,height:top+count*rowHeight};
+  }
+
+  function create(config){
+    const m=model(config),n=m.dates.length,total=n+3,last=column(total-1),sheetRows=new Map(),merges=[],styles=[],styleMap=new Map(),fonts=[{ink:'#172530',bold:false,size:11}],fontMap=new Map([['#172530:false:11',0]]);
+    function style({align='left',ink='#172530',fill=0,bold=false,size=10,wrap=false}={}){
+      const fk=[color(ink),bold,size].join(':'),key=[fk,align,fill,wrap].join(':');
+      if(!fontMap.has(fk)){fontMap.set(fk,fonts.length);fonts.push({ink:color(ink),bold,size})}
+      if(!styleMap.has(key)){styleMap.set(key,styles.length);styles.push({font:fontMap.get(fk),align,fill,wrap})}return styleMap.get(key);
+    }
+    function put(r,c,text,opts){if(!sheetRows.has(r))sheetRows.set(r,new Map());sheetRows.get(r).set(c,cell(text,r,c,style(opts)))}
+    function merge(r1,c1,r2,c2,text,opts){if(c2<c1)return;for(let r=r1;r<=r2;r++)for(let c=c1;c<=c2;c++)put(r,c,'',opts);put(r1,c1,text,opts);if(r1!==r2||c1!==c2)merges.push(`${column(c1)}${r1}:${column(c2)}${r2}`)}
+    const p=config.project||{},company=config.company||{},a=Math.max(3,Math.floor(total*.4)),b=Math.max(a+2,Math.floor(total*.65));
+    merge(1,0,4,a-1,config.name+'\n'+config.type,{bold:true,size:14,wrap:true});
+    ['施主','監理','設計','施工'].forEach((label,i)=>{put(i+1,a,label,{align:'center',fill:2});merge(i+1,a+1,i+1,b-1,[p.client,p.supervisor||p.supervision,p.designer,p.primeContractor||p.contractor||p.mainContractor||company.name][i]||'—',{wrap:true,size:9})});
+    const rightLabels=['全体工程 進捗状況','現場代理人／監理技術者','作成(B)／作成(A)','作成日 '+(config.created||'')];
+    if(total-b>=5){const progress=Math.max(1,Math.min(total-b-4,Math.floor((total-b)*.35)));merge(1,b,4,b+progress-1,'全体工程 進捗状況\n\n作成日 '+(config.created||''),{align:'center',size:9,wrap:true});const names=['現場代理人','監理技術者','作成(B)','作成(A)'];for(let i=0;i<4;i++){const c1=b+progress+Math.floor((total-b-progress)*i/4),c2=b+progress+Math.floor((total-b-progress)*(i+1)/4)-1;merge(1,c1,1,c2,names[i],{align:'center',size:9});merge(2,c1,4,c2,'')}}else rightLabels.forEach((value,i)=>merge(i+1,b,i+1,total-1,value,{align:'center',size:9}));
+    merge(5,0,5,2,'月間災害防止目標',{size:9});merge(5,3,5,total-1,(config.safetyGoal||'')+'　'+(m.dates[0]||'')+' ～ '+(m.dates.at(-1)||''),{align:'center'});
+    merge(6,0,8,2,'工種・項目',{align:'center',bold:true,fill:2});
+    let monthStart=0;while(monthStart<n){let end=monthStart;while(end+1<n&&m.dates[end+1].slice(0,7)===m.dates[monthStart].slice(0,7))end++;merge(6,monthStart+3,6,end+3,m.dates[monthStart].slice(0,4)+'年 '+Number(m.dates[monthStart].slice(5,7))+'月',{align:'center',fill:2});monthStart=end+1}
+    m.dates.forEach((d,i)=>{const fill=weekday(d)===0?3:weekday(d)===6?4:2;put(7,i+3,String(Number(d.slice(8))),{align:'center',fill});put(8,i+3,'日月火水木金土'[weekday(d)],{align:'center',fill,size:9})});
+    for(const row of m.rows){const r=9+row.slot,f=m.formats.get(row.slot+':title')||{};merge(r,0,r,2,row.title||'',{align:f.align,ink:f.color});m.dates.forEach((d,i)=>{const format=m.formats.get(row.slot+':'+d)||{},text=m.texts.get(row.slot+':'+d)||'',scheduled=row.id&&!row.gridOnly&&d>=(row.start||row.date)&&d<=(row.end||row.start||row.date),fill=scheduled?5:weekday(d)===0?3:weekday(d)===6?4:0;put(r,i+3,text,{align:format.align,ink:format.color,fill})})}
+    let shapeId=0,anchors='';const emu=x=>Math.round(x*9525);
+    function anchor(x,y,w,h,body,cells){const id=++shapeId,sp=`<xdr:sp><xdr:nvSpPr><xdr:cNvPr id="${id}" name="工程図形 ${id}"/><xdr:cNvSpPr/></xdr:nvSpPr>${body}</xdr:sp><xdr:clientData/>`;
+      const marker=(tag,col,row,colOff=0,rowOff=0)=>`<xdr:${tag}><xdr:col>${col}</xdr:col><xdr:colOff>${emu(colOff)}</xdr:colOff><xdr:row>${row}</xdr:row><xdr:rowOff>${emu(rowOff)}</xdr:rowOff></xdr:${tag}>`;
+      if(cells)return `<xdr:twoCellAnchor editAs="twoCell">${marker('from',cells.col,cells.row)}${marker('to',cells.endCol,cells.endRow)}${sp}</xdr:twoCellAnchor>`;
+      const col=Math.max(3,Math.floor((x-190)/m.day)+3),headerTops=[0,24,48,72,96,118,140,160],row=Math.max(0,y<m.top?headerTops.findLastIndex(top=>top<=y):8+Math.floor((y-m.top)/m.rowHeight)),baseX=190+(col-3)*m.day,baseY=row<8?headerTops[row]:m.top+(row-8)*m.rowHeight;
+      return `<xdr:oneCellAnchor>${marker('from',col,row,x-baseX,y-baseY)}<xdr:ext cx="${emu(Math.max(1,w))}" cy="${emu(Math.max(1,h))}"/>${sp}</xdr:oneCellAnchor>`;
+    }
+    function textShape(text,x,y,w,h,ink){return anchor(x,y,w,h,`<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></xdr:spPr><xdr:txBody><a:bodyPr wrap="none" lIns="0" rIns="0" tIns="0" bIns="0"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="ja-JP" sz="900"><a:solidFill><a:srgbClr val="${color(ink).slice(1)}"/></a:solidFill><a:latin typeface="Yu Gothic"/><a:ea typeface="Yu Gothic"/></a:rPr><a:t>${xml(text)}</a:t></a:r></a:p></xdr:txBody>`)}
+    function point(x,y){return `<a:pt x="${Math.round(x*1000)}" y="${Math.round(y*1000)}"/>`}
+    for(const line of m.lines){
+      const {sx,sy,ex,ey,r,dx,dy,w,h}=line,ink=color(line.color).slice(1),dash=line.style==='dotted'?'dot':line.style==='dashed'?'dash':'solid';
+      let path=`<a:moveTo>${point(sx,sy)}</a:moveTo>`;
+      if(line.curved){const x1=ex-dx*r,y1=sy+dy*r;path+=`<a:lnTo>${point(x1,sy)}</a:lnTo><a:cubicBezTo>${point(x1+dx*r*2/3,sy)}${point(ex,sy+dy*r/3)}${point(ex,y1)}</a:cubicBezTo><a:lnTo>${point(ex,ey)}</a:lnTo>`}else path+=`<a:lnTo>${point(ex,ey)}</a:lnTo>`;
+      const head=line.firstVisible&&line.startMarker==='arrow'?'triangle':'none',tail=line.lastVisible&&line.endMarker==='arrow'?'triangle':'none';
+      anchors+=anchor(line.x,line.y,w,h,`<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${Math.round(w*1000)}" h="${Math.round(h*1000)}" fill="none">${path}</a:path></a:pathLst></a:custGeom><a:noFill/><a:ln w="${Math.round((Number(line.weight)||2)*9525)}"><a:solidFill><a:srgbClr val="${ink}"/></a:solidFill><a:prstDash val="${dash}"/><a:headEnd type="${head}"/><a:tailEnd type="${tail}"/></a:ln></xdr:spPr>`,{col:Math.round((line.x-190)/m.day)+3,row:Math.round((line.y-m.top)/m.rowHeight)+8,endCol:Math.round((line.x+line.w-190)/m.day)+3,endRow:Math.round((line.y+line.h-m.top)/m.rowHeight)+8});
+      for(const [kind,px,py,visible] of [[line.startMarker,sx,sy,line.firstVisible],[line.endMarker,ex,ey,line.lastVisible]])if(visible&&['open','filled'].includes(kind))anchors+=anchor(line.x+px-4,line.y+py-4,8,8,`<xdr:spPr><a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>${kind==='filled'?`<a:solidFill><a:srgbClr val="${ink}"/></a:solidFill>`:'<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill>'}<a:ln w="19050"><a:solidFill><a:srgbClr val="${ink}"/></a:solidFill></a:ln></xdr:spPr>`);
+      if(line.label)anchors+=textShape(line.label,line.x,line.y+sy-17,w,16,line.color);
+    }
+    const stylesXml=`<?xml version="1.0" encoding="UTF-8"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="${fonts.length}">${fonts.map(f=>`<font>${f.bold?'<b/>':''}<sz val="${f.size}"/><color rgb="FF${f.ink.slice(1)}"/><name val="Yu Gothic"/></font>`).join('')}</fonts><fills count="6"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>${['F1F3F4','FDEAEA','EDF4FB','87B8BD'].map(c=>`<fill><patternFill patternType="solid"><fgColor rgb="FF${c}"/><bgColor indexed="64"/></patternFill></fill>`).join('')}</fills><borders count="1"><border>${['left','right','top','bottom'].map(side=>`<${side} style="thin"><color rgb="FF9BA7AD"/></${side}>`).join('')}<diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="${styles.length}">${styles.map(s=>`<xf numFmtId="0" fontId="${s.font}" fillId="${s.fill}" borderId="0" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="${['left','center','right'].includes(s.align)?s.align:'left'}" vertical="center"${s.wrap?' wrapText="1"':''}/></xf>`).join('')}</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`;
+    const heights=[24,24,24,24,22,22,20,20],sheetData=[...sheetRows].sort((a,b)=>a[0]-b[0]).map(([r,cells])=>`<row r="${r}" ht="${(heights[r-1]||m.rowHeight)*.75}" customHeight="1">${[...cells].sort((a,b)=>a[0]-b[0]).map(c=>c[1]).join('')}</row>`).join('');
+    const colWidth=px=>(px-5)/7;
+    const sheet=`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><dimension ref="A1:${last}${8+m.rows.length}"/><sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane xSplit="3" ySplit="8" topLeftCell="D9" activePane="bottomRight" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="19.5"/><cols><col min="1" max="3" width="${colWidth(190/3)}" customWidth="1"/><col min="4" max="${total}" width="${colWidth(m.day)}" customWidth="1"/></cols><sheetData>${sheetData}</sheetData><mergeCells count="${merges.length}">${merges.map(ref=>`<mergeCell ref="${ref}"/>`).join('')}</mergeCells><printOptions horizontalCentered="1"/><pageMargins left="0.25" right="0.25" top="0.3" bottom="0.3" header="0.1" footer="0.1"/><pageSetup paperSize="${config.paper?.startsWith('A1')?0:config.paper?.startsWith('A4')?9:8}" ${config.paper?.startsWith('A1')?'paperWidth="594mm" paperHeight="841mm"':''} orientation="${config.paper==='A4'||config.paper?.endsWith('縦')?'portrait':'landscape'}" fitToWidth="1" fitToHeight="1"/><drawing r:id="rId1"/></worksheet>`;
+    const files={
+      '[Content_Types].xml':'<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>',
+      '_rels/.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>',
+      'xl/workbook.xml':`<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="工程表" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm.Print_Area" localSheetId="0">'工程表'!$A$1:$${last}$${8+m.rows.length}</definedName></definedNames></workbook>`,
+      'xl/_rels/workbook.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>',
+      'xl/worksheets/sheet1.xml':sheet,'xl/styles.xml':stylesXml,
+      'xl/worksheets/_rels/sheet1.xml.rels':'<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>',
+      'xl/drawings/drawing1.xml':`<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors}</xdr:wsDr>`
+    };return zip(files);
+  }
+
+  function draw(config){
+    const m=model(config),canvas=document.createElement('canvas'),scale=Math.min(2,16000/Math.max(m.width,m.height));canvas.width=Math.ceil(m.width*scale);canvas.height=Math.ceil(m.height*scale);const ctx=canvas.getContext('2d');ctx.scale(scale,scale);ctx.fillStyle='white';ctx.fillRect(0,0,m.width,m.height);
+    const box=(x,y,w,h,text='',align='left',ink='#172530',fill='white',font=12)=>{ctx.fillStyle=fill;ctx.fillRect(x,y,w,h);ctx.strokeStyle='#9ba7ad';ctx.lineWidth=.7;ctx.strokeRect(x,y,w,h);ctx.save();ctx.beginPath();ctx.rect(x+2,y+1,w-4,h-2);ctx.clip();ctx.font=font+'px sans-serif';ctx.fillStyle=color(ink);ctx.textAlign=align;ctx.textBaseline='middle';const xx=align==='center'?x+w/2:align==='right'?x+w-5:x+5;ctx.fillText(text,xx,y+h/2);ctx.restore()};
+    const p=config.project||{},company=config.company||{},titleWidth=m.width*.4,partyWidth=m.width*.25;
+    box(0,0,titleWidth,96);ctx.font='bold 18px sans-serif';ctx.fillStyle='#172530';let y=23,line='';for(const ch of config.name){if(ctx.measureText(line+ch).width>titleWidth-20){ctx.fillText(line,10,y);y+=22;line=''}line+=ch}ctx.fillText(line,10,y);ctx.font='12px sans-serif';ctx.fillText(config.type,10,85);
+    ['施主','監理','設計','施工'].forEach((label,i)=>{box(titleWidth,i*24,50,24,label,'center','#172530','#f1f3f4',10);box(titleWidth+50,i*24,partyWidth-50,24,[p.client,p.supervisor||p.supervision,p.designer,p.primeContractor||p.contractor||p.mainContractor||company.name][i]||'—','left','#172530','white',10)});
+    const rightX=titleWidth+partyWidth,rightW=m.width-rightX,progressW=rightW*.35;
+    box(rightX,0,progressW,72,'全体工程 進捗状況','center','#172530','white',10);box(rightX,72,progressW,24,'作成日 '+(config.created||''),'center','#172530','white',9);
+    ['現場代理人','監理技術者','作成(B)','作成(A)'].forEach((v,i)=>{const x=rightX+progressW+i*(rightW-progressW)/4,w=(rightW-progressW)/4;box(x,0,w,24,v,'center','#172530','white',9);box(x,24,w,72)});
+    box(0,96,190,22,'月間災害防止目標','left','#172530','white',10);box(190,96,m.width-190,22,(config.safetyGoal||'')+'　'+m.dates[0]+' ～ '+m.dates.at(-1),'center');box(0,118,190,62,'工種・項目','center','#172530','#f1f3f4');
+    let i=0;while(i<m.dates.length){let j=i;while(j+1<m.dates.length&&m.dates[j+1].slice(0,7)===m.dates[i].slice(0,7))j++;box(190+i*m.day,118,(j-i+1)*m.day,22,m.dates[i].slice(0,4)+'年 '+Number(m.dates[i].slice(5,7))+'月','center','#172530','#f1f3f4');i=j+1}
+    m.dates.forEach((d,i)=>{let fill=weekday(d)===0?'#fdeaea':weekday(d)===6?'#edf4fb':'white';box(190+i*m.day,140,m.day,20,String(Number(d.slice(8))),'center','#172530',fill,10);box(190+i*m.day,160,m.day,20,'日月火水木金土'[weekday(d)],'center','#172530',fill,10)});
+    for(const row of m.rows){let y=m.top+row.slot*m.rowHeight,format=m.formats.get(row.slot+':title')||{};box(0,y,190,m.rowHeight,row.title||'',format.align,format.color);
+      m.dates.forEach((d,i)=>box(190+i*m.day,y,m.day,m.rowHeight,'','left','#172530',row.id&&!row.gridOnly&&d>=(row.start||row.date)&&d<=(row.end||row.start||row.date)?'#87b8bd':weekday(d)===0?'#fdeaea':weekday(d)===6?'#edf4fb':'white'));
+      m.dates.forEach((d,i)=>{let text=m.texts.get(row.slot+':'+d);if(!text)return;const f=m.formats.get(row.slot+':'+d)||{},align=f.align||'left';let first=i,last=i;while(first>0&&!m.texts.get(row.slot+':'+m.dates[first-1]))first--;while(last+1<m.dates.length&&!m.texts.get(row.slot+':'+m.dates[last+1]))last++;let left=align==='right'?first:align==='center'?i-Math.min(i-first,last-i):i,right=align==='left'?last:align==='center'?i+Math.min(i-first,last-i):i;ctx.save();ctx.beginPath();ctx.rect(190+left*m.day+2,y+1,(right-left+1)*m.day-4,m.rowHeight-2);ctx.clip();ctx.font='12px sans-serif';ctx.fillStyle=color(f.color);ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillText(text,190+(i+(align==='center'?.5:align==='right'?1:0))*m.day+(align==='left'?3:align==='right'?-3:0),y+m.rowHeight/2);ctx.restore()});
+    }
+    function marker(kind,x,y,angle,ink){ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.fillStyle=ink;ctx.strokeStyle=ink;ctx.setLineDash([]);ctx.beginPath();if(kind==='open'||kind==='filled'){ctx.arc(0,0,4,0,Math.PI*2);if(kind==='open')ctx.fillStyle='white';ctx.fill();ctx.stroke()}else if(kind==='arrow'){ctx.moveTo(0,0);ctx.lineTo(-9,-4);ctx.lineTo(-9,4);ctx.closePath();ctx.fill()}ctx.restore()}
+    for(const l of m.lines){ctx.save();ctx.translate(l.x,l.y);ctx.strokeStyle=color(l.color);ctx.lineWidth=Number(l.weight)||2;ctx.setLineDash(l.style==='dotted'?[2,5]:l.style==='dashed'?[9,5]:[]);ctx.beginPath();ctx.moveTo(l.sx,l.sy);if(l.curved){ctx.lineTo(l.ex-l.dx*l.r,l.sy);ctx.quadraticCurveTo(l.ex,l.sy,l.ex,l.sy+l.dy*l.r);ctx.lineTo(l.ex,l.ey)}else ctx.lineTo(l.ex,l.ey);ctx.stroke();const startAngle=l.dx<0?Math.PI:0,endAngle=l.curved?(l.dy>0?Math.PI/2:-Math.PI/2):0;if(l.firstVisible)marker(l.startMarker,l.sx,l.sy,startAngle+Math.PI,color(l.color));if(l.lastVisible)marker(l.endMarker,l.ex,l.ey,endAngle,color(l.color));if(l.label){ctx.font='12px sans-serif';ctx.fillStyle=color(l.color);ctx.textAlign='center';ctx.textBaseline='bottom';ctx.fillText(l.label,l.w/2,l.sy-5)}ctx.restore()}
+    return canvas;
+  }
+  function pageSize(paper){let dims=paper?.startsWith('A1')?[594,841]:paper?.startsWith('A4')?[210,297]:[297,420];if(paper!=='A4'&&!paper?.endsWith('縦'))dims.reverse();return dims}
+  async function pdf(config){const canvas=draw(config),jpeg=await new Promise((resolve,reject)=>canvas.toBlob(b=>b?resolve(b):reject(Error('PDF画像を生成できません')),'image/jpeg',.95)),img=new Uint8Array(await jpeg.arrayBuffer()),[mmW,mmH]=pageSize(config.paper),w=mmW*72/25.4,h=mmH*72/25.4,s=Math.min((w-30)/canvas.width,(h-30)/canvas.height),iw=canvas.width*s,ih=canvas.height*s;
+    let parts=[],offset=0,pos=[0],put=b=>{parts.push(b);offset+=b.length},txt=t=>put(encoder.encode(t)),obj=(id,body)=>{pos[id]=offset;txt(`${id} 0 obj\n${body}\nendobj\n`)};
+    txt('%PDF-1.4\n');obj(1,'<< /Type /Catalog /Pages 2 0 R >>');obj(2,'<< /Type /Pages /Kids [3 0 R] /Count 1 >>');obj(3,`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${w} ${h}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);pos[4]=offset;txt(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${canvas.width} /Height ${canvas.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.length} >>\nstream\n`);put(img);txt('\nendstream\nendobj\n');const commands=`q\n${iw} 0 0 ${ih} ${(w-iw)/2} ${h-15-ih} cm\n/Im0 Do\nQ\n`;obj(5,`<< /Length ${encoder.encode(commands).length} >>\nstream\n${commands}endstream`);const xref=offset;txt('xref\n0 6\n0000000000 65535 f \n');for(let i=1;i<=5;i++)txt(`${String(pos[i]).padStart(10,'0')} 00000 n \n`);txt(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);return new Blob(parts,{type:'application/pdf'});
+  }
+  function saveBlob(blob,name){const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000)}
+  window.downloadScheduleXlsx=base=>{try{const c=captureConfig(base);saveBlob(create(c),safe(c.type+'-'+c.name)+'.xlsx')}catch(e){console.error(e);alert('工程表を出力できませんでした。')}};
+  function print(config){const popup=window.open('','_blank');if(!popup){alert('印刷画面を開くためポップアップを許可してください');return}const canvas=draw(config),[w,h]=pageSize(config.paper);popup.document.write(`<!doctype html><html lang="ja"><meta charset="utf-8"><title>${xml(config.name)} 工程表</title><style>@page{size:${w}mm ${h}mm;margin:6mm}body{margin:0}img{display:block;width:${w-12}mm;height:${h-12}mm;object-fit:contain;object-position:top}button{margin:12px;padding:8px 16px}@media print{button{display:none}}</style><button onclick="window.print()">印刷</button><img src="${canvas.toDataURL('image/png')}" alt="工程表"></html>`);popup.document.close();const image=popup.document.querySelector('img');const ready=()=>{popup.focus();popup.print()};if(image.complete)setTimeout(ready,100);else image.onload=ready}
+  function tools(){const button=document.querySelector('[data-schedule-export]');if(!button||button.parentElement.querySelector('[data-schedule-pdf]'))return;const pdfButton=document.createElement('button'),printButton=document.createElement('button');pdfButton.type=printButton.type='button';pdfButton.className=printButton.className='btn secondary';pdfButton.dataset.schedulePdf='';pdfButton.textContent='PDFダウンロード';printButton.dataset.schedulePrint='';printButton.textContent='印刷';button.after(pdfButton,printButton)}
+  document.addEventListener('click',async e=>{const button=e.target.closest('[data-schedule-pdf],[data-schedule-print]');if(!button)return;document.activeElement?.blur?.();const config=captureConfig();if(button.hasAttribute('data-schedule-print')){print(config);return}button.disabled=true;try{saveBlob(await pdf(config),safe(config.type+'-'+config.name)+'.pdf')}catch(error){console.error(error);alert('PDFを出力できませんでした。')}finally{button.disabled=false}});
+  new MutationObserver(tools).observe(document.documentElement,{childList:true,subtree:true});tools();
+  window.__scheduleExportTest={create,pdf,draw,model,captureConfig};
 })();
