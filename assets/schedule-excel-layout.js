@@ -257,12 +257,39 @@
       for(let c=Math.min(range.first.col,range.last.col);c<=Math.max(range.first.col,range.last.col);c++)
         rows[r].children[c+1].classList.add('schedule-range-selected');
   }
+
+  function moveSelectedCell(key,extend=false){
+    const steps={ArrowLeft:[0,-1],ArrowRight:[0,1],ArrowUp:[-1,0],ArrowDown:[1,0]};
+    const step=steps[key];
+    if(!step||!range?.last.row.isConnected)return false;
+    const rows=[...range.last.row.parentElement.querySelectorAll('tr:not(.schedule-annotation)')];
+    const index=rows.indexOf(range.last.row);
+    if(index<0)return false;
+    const row=rows[Math.max(0,Math.min(rows.length-1,index+step[0]))];
+    const col=Math.max(0,Math.min(row.children.length-3,range.last.col+step[1]));
+    const next={row,col};
+    range={first:extend?range.first:next,last:next};
+    dragging=false;suppressClick=false;selectedTitleRow=null;selectLine('');highlight();
+    const td=row.children[col+1];
+    td.tabIndex=-1;td.focus({preventScroll:true});
+    td.scrollIntoView({block:'nearest',inline:'nearest',behavior:'instant'});
+    // Keep the active day cell visible to the right of the sticky item column.
+    const scroll=row.closest('.schedule-scroll'),sticky=row.firstElementChild;
+    if(scroll&&sticky){
+      const rect=td.getBoundingClientRect(),bounds=scroll.getBoundingClientRect();
+      const left=bounds.left+sticky.getBoundingClientRect().width;
+      if(rect.left<left)scroll.scrollLeft-=left-rect.left;
+      else if(rect.right>bounds.right)scroll.scrollLeft+=rect.right-bounds.right;
+    }
+    return true;
+  }
   document.addEventListener('pointerdown',e=>{
     if(e.button!==0||e.pointerType==='touch'||e.target.closest('input'))return;
     const hit=e.target.closest('[data-pick-line]');if(hit){e.preventDefault();e.stopImmediatePropagation();selectLine(hit.dataset.pickLine);hit.focus();return}
     const cell=cellAt(e.target);if(!cell)return;
     selectLine('');selectedTitleRow=null;
-    e.preventDefault();range={first:cell,last:cell};dragging=true;suppressClick=true;highlight();
+    e.preventDefault();document.activeElement?.blur?.();range={first:cell,last:cell};dragging=true;suppressClick=true;highlight();
+    const td=cell.row.children[cell.col+1];td.tabIndex=-1;td.focus({preventScroll:true});
   },true);
   document.addEventListener('pointermove',e=>{
     if(!dragging)return;
@@ -346,7 +373,8 @@
   }
   document.addEventListener('dblclick',e=>{const cell=cellAt(e.target);if(cell&&!e.target.closest('input')){e.preventDefault();editCell(cell)}});
   document.addEventListener('keydown',e=>{
-    if(e.target.closest('input,textarea,select')||e.ctrlKey||e.metaKey||e.altKey)return;
+    if(e.target.closest('input,textarea,select,[contenteditable=true]')||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
+    if(moveSelectedCell(e.key,e.shiftKey)){e.preventDefault();return;}
     if(range?.last.row.isConnected&&(e.key.length===1||e.key==='F2'||e.key==='Enter')){
       e.preventDefault();editCell(range.last,e.key.length===1?e.key:undefined);
     }
