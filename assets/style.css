@@ -227,3 +227,6 @@
 .board-preview .chalk-footer{flex:0 0 auto;min-height:0;font-size:3cqw!important;line-height:1.2}
 .board-preview .chalk-footer span{padding:1cqw!important}
 .photo-camera-board,.photo-card-board,.photo-lightbox-board,.bulk-placement-board{max-height:none!important}
+
+/* Keep the complete product name readable in desktop and mobile navigation. */
+.brand-name span{font-size:22px;letter-spacing:0}.brand-name{min-width:0}.brand-name small{font-size:9px;letter-spacing:.1em}
