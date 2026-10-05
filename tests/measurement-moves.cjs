@@ -1,6 +1,6 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
-const handlers={},stored=new Map();let sequence=0,fail=false;
-const c={console,structuredClone,Promise,data:{projects:[{id:'p',name:'現場'}]},projectId:'p',page:'measurements',uid:()=>`id${++sequence}`,today:()=> '2026-10-06',save:()=>true,esc:s=>String(s??''),intro:()=>'',alert(){},render(){},document:{addEventListener(t,f){(handlers[t]||=[]).push(f)},querySelector(){return null},querySelectorAll(){return []}},window:{addEventListener(){}}};
+const handlers={},stored=new Map();let sequence=0,fail=false,saveOK=true;
+const c={console,structuredClone,Promise,data:{projects:[{id:'p',name:'現場'}]},projectId:'p',page:'measurements',uid:()=>`id${++sequence}`,today:()=> '2026-10-06',save:()=>saveOK,esc:s=>String(s??''),intro:()=>'',alert(){},confirm:()=>true,render(){},items:key=>c.data[key].filter(x=>x.projectId===c.projectId),document:{addEventListener(t,f){(handlers[t]||=[]).push(f)},querySelector(){return null},querySelectorAll(){return []}},window:{addEventListener(){}}};
 vm.createContext(c);vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../assets/measurements.js'),'utf8'),c);
 const run=s=>vm.runInContext(s,c);
 c.batch=async docs=>{if(fail)throw Error('quota');for(const d of docs)stored.set(d.id,structuredClone(d))};
@@ -13,7 +13,9 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
  assert.equal((html.match(/id="measurePdfFile"/g)||[]).length,1);
  assert.equal((html.match(/data-measure-new /g)||[]).length,1);
  assert(html.indexOf('measure-top-actions')<html.indexOf('measure-folder-records'));
+ assert(html.indexOf('visual-folder-grid')<html.indexOf('measure-folder-records'));
  assert(html.indexOf('measureRecordForm')<html.indexOf('measure-library'));
+ assert(html.includes('data-drag-folder="measure:id1"'));assert(html.includes('data-measure-doc-delete="pdf"'));
  assert(html.includes('data-measure-drag-kind="row"'));assert(html.includes('data-measure-drag-kind="pdf"'));assert(html.includes('data-measure-drop-folder="id2"'));
  assert.equal(await run("moveMeasureItem('row','r1','id2')"),true);
  assert.equal(run("measureRecordOwner('r1').folderId"),'id2');
@@ -42,5 +44,19 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
  await handlers.dragover[0]({target:{closest:()=>target},dataTransfer:transfer,preventDefault(){prevented=true}});assert(prevented);
  await handlers.drop[0]({target:{closest:()=>target},preventDefault(){}});assert.equal(run("measureRecordOwner('r1').folderId"),'id3');
  c.restored=structuredClone(Array.from(stored.values()));run('measureDocs=restored');assert.equal(run("measureRecordOwner('r1').rows[0].number"),7);assert.equal(run("measureDocs.find(d=>d.id==='pdf').marks[0].rowId"),'r1');
- console.log('PASS: upper records/right toolbar, atomic row/PDF moves, fixed numbers/XY/PDF links, reload, failure rollback, project isolation and drag/drop events');
+ // Measurement folders use the same tested folder drag mechanism as photo management.
+ const app=fs.readFileSync(require('node:path').join(__dirname,'../assets/app.js'),'utf8');
+ for(const name of ['sortedFolderList','moveFolderByDrop'])vm.runInContext(app.split('\n').find(l=>l.startsWith('function '+name+'(')),c);
+ assert.equal(run("moveFolderByDrop('measure','id3','id2','before')"),true);
+ assert.deepEqual(Array.from(run('measureSortedFolders(measureFolders())'),f=>f.id),['id1','id3','id2','id4']);
+ assert.equal(run("moveFolderByDrop('measure','id3','id2','inside')"),true);assert.equal(run("measureFolders().find(f=>f.id==='id3').parentId"),'id2');
+ assert.equal(run("moveFolderByDrop('measure','id2','id3','inside')"),false);
+ const original=JSON.stringify(c.data.measureFolders);saveOK=false;assert.equal(run("moveFolderByDrop('measure','id4','id2','after')"),false);assert.equal(JSON.stringify(c.data.measureFolders),original);saveOK=true;
+ // Cancel the wrong upload by its own delete button, without affecting a selected different PDF.
+ run("measureDocs.push({id:'wrong',projectId:'p',folderId:'',name:'wrong.pdf',file:{},rows:[],marks:[]});measureDocId='pdf'");
+ const button={dataset:{measureDocDelete:'wrong'},hasAttribute:key=>key==='data-measure-doc-delete'};
+ await handlers.click.find(fn=>fn.toString().includes('[data-measure-folder],[data-measure-folder-add]'))({target:{closest:()=>button}});
+ assert.equal(run("measureDocs.find(d=>d.id==='wrong').type"),'records');assert.equal(run("measureDocs.find(d=>d.id==='wrong').file"),undefined);assert.equal(run('measureDocId'),'pdf');
+ assert.equal(run("measureDocs.find(d=>d.id==='pdf').marks[0].rowId"),'r1');
+ console.log('PASS: folder/record/PDF order, shared folder drag/reorder/nesting/cycle checks, per-upload PDF cancellation, atomic record moves, numbers/XY/PDF links and save rollback');
 })().catch(e=>{console.error(e);process.exitCode=1});
