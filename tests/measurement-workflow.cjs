@@ -6,8 +6,8 @@ vm.createContext(c);vm.runInContext(fs.readFileSync(require('node:path').join(__
 const run=code=>vm.runInContext(code,c);
 c.fakeStore=async(mode,value)=>{if(mode==='read')return structuredClone(Array.from(stored.values()));if(mode==='write')stored.set(value.id,structuredClone(value));if(mode==='delete')stored.delete(value);};
 c.fakeBatch=async docs=>{for(const doc of docs)stored.set(doc.id,structuredClone(doc));};
-run("measureStore=fakeStore;measureStoreBatch=fakeBatch;disposeMeasurePdf=async()=>{};measureReady=true;measureLoaded=true;measureFolder=measureFolders()[0].id");
-function place(id,x,y) {run(`measureRowId='${id}';measureTool='point';bindMeasureDrawing(globalThis.testOverlay)`);const e={clientX:x,clientY:y,pointerId:1,target:{closest:()=>null},preventDefault(){}};overlay.onpointerdown(e);overlay.onpointerup(e);}
+run("measureStore=fakeStore;measureStoreBatch=fakeBatch;disposeMeasurePdf=async()=>{};measureReady=true;measureLoaded=true;measureFolder=measureFolders()[0].id;openMeasurePlacementChoice=(doc,mark)=>{measurePendingPlacement={docId:doc.id,site:projectId,mark}};");
+function place(id,x,y) {run(`measureRowId='${id}';measureTool='point';bindMeasureDrawing(globalThis.testOverlay)`);const e={clientX:x,clientY:y,pointerId:1,target:{closest:()=>null},preventDefault(){}};const before=run('measureCurrent().marks.length');overlay.onpointerdown(e);overlay.onpointerup(e);assert.equal(run('measureCurrent().marks.length'),before);assert(run(`commitMeasurePlacement('existing','${id}')`));}
 c.testOverlay=overlay;
 (async()=>{
     for(let i=0;i<3;i++)run('createStandaloneMeasure()');await run('measureSaveQueue');
@@ -27,5 +27,12 @@ c.testOverlay=overlay;
     await run(`deleteMeasureRecord('${pdfFirst}')`);run('createStandaloneMeasure()');assert.equal(run('measureCurrentRow().number'),5);await run('measureSaveQueue');
     c.restored=await c.fakeStore('read');run('measureDocs=restored');assert.equal(run('numberMeasureRecords(measureDocs).length'),0);assert.equal(run('nextMeasureNumber()'),6);
     const old=[{projectId:'a',rows:[{id:'old1',number:1},{id:'old2'}],marks:[{rowId:'old2',x:.2}]},{projectId:'a',rows:[{id:'old3',number:1}],marks:[]},{projectId:'b',rows:[{id:'other'}],marks:[]}];c.old=old;run('numberMeasureRecords(old)');assert.equal(new Set(old.slice(0,2).flatMap(d=>d.rows.map(r=>r.number))).size,3);assert.equal(old[0].rows[0].number,1);assert.equal(old[0].marks[0].rowId,'old2');assert.equal(run('numberMeasureRecords(old).length'),0);
+    run("measureDocId='pdf2';measurePendingPlacement={docId:'pdf2',site:'p',mark:{x:.4,y:.3,tool:'point',page:1,color:'#000'}}");
+    const beforeCount=run('measurementRows()');assert(run('renderMeasurePlacementChoice()').includes('既存の実測番号を配置'));assert(run('renderMeasurePlacementChoice()').includes('新規実測を作成'));
+    assert.equal(run("commitMeasurePlacement('existing','missing')"),false);assert.equal(run('measurementRows()'),beforeCount);
+    run('closeMeasurePlacementChoice()');assert.equal(run('measurementRows()'),beforeCount);assert.equal(run('nextMeasureNumber()'),6);
+    run("measurePendingPlacement={docId:'pdf2',site:'p',mark:{x:.4,y:.3,tool:'point',page:1,color:'#000'}}");assert(run("commitMeasurePlacement('new')"));assert.equal(run('measureCurrentRow().number'),6);assert.equal(run('measurementRows()'),beforeCount+1);assert.equal(run('measureCurrent().marks.at(-1).rowId'),run('measureRowId'));await run('measureSaveQueue');
+    const sidebar=run('renderMeasureFolders()');assert(sidebar.includes('data-measure-sidebar-row'));assert(sidebar.includes('No.6'));
+    run('collapsedMeasureFolders.add(measureFolder)');assert.equal(run('renderMeasureFolders()').includes('data-measure-sidebar-row'),false);run('collapsedMeasureFolders.delete(measureFolder)');
     console.log('PASS: multiple PDF-free records, fixed numbers, two PDF placements, edits use original record, multi-PDF deletion, PDF-first path, PDF removal retains records, restart and legacy migration');
 })().catch(error=>{console.error(error);process.exitCode=1;});
