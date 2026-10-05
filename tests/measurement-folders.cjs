@@ -9,7 +9,7 @@ function click(selector, dataset = {}, attribute = '') {return {target: {closest
     run("measureLoaded=true;measureReady=true;measureFolder=measureFolders()[0].id;measureDocs=[{id:'d',projectId:'site1',folderId:measureFolder,name:'test.pdf',rows:[{id:'r',values:[{actual:'24'}]}],marks:[{rowId:'r'}]},{id:'other',projectId:'site2',folderId:'f1',rows:[],marks:[]}]");
     c.writeBatch = async docs => {if (failWrite) throw Error('quota'); for (const doc of docs) stored.set(doc.id, structuredClone(doc));};
     run('measureStoreBatch=writeBatch;disposeMeasurePdf=async()=>{}');
-    promptAnswer = '1階'; await handlers.click.at(-1)(click('[data-measure-folder-add]', {}, 'data-measure-folder-add'));
+    promptAnswer = '1階'; await handlers.click.find(fn=>fn.toString().includes("[data-measure-folder],[data-measure-folder-add]"))(click('[data-measure-folder-add]', {}, 'data-measure-folder-add'));
     const child = run('measureFolder'); assert.equal(run(`measureInFolder('${child}','f1')`), true);
     assert.equal(run('measureVisibleDocs().length'), 0);
     run("measureDocs[0].folderId=measureFolder");

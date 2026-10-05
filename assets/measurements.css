@@ -3,3 +3,4 @@
 .measure-folder-layout .measure-actions{margin:14px 0}.measure-folder-layout .measure-workspace{grid-template-columns:minmax(0,1fr)}.measure-folder-layout .measure-library{box-shadow:none}.measure-folder-layout .measure-records{box-shadow:none}
 
 .measure-plate-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.measure-plate-fields input{width:100%;min-width:0}@media(max-width:420px){.measure-plate-fields{grid-template-columns:1fr}}
+.measure-no-pdf{padding:16px}.measure-no-pdf p{line-height:1.7;margin-bottom:0}.measure-record-number{color:#087c83;margin:0 0 14px}.measure-records .measure-record-button>b{padding:4px;min-width:34px;width:auto;border-radius:8px}

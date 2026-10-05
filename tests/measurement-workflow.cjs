@@ -1,0 +1,31 @@
+const fs = require('node:fs'), vm = require('node:vm'), assert = require('node:assert/strict');
+const stored = new Map(), handlers = {}; let sequence=0, showOverlay=false;
+const overlay = {style:{},innerHTML:'',getBoundingClientRect:()=>({left:0,top:0,width:1000,height:1000}),setPointerCapture() {}};
+const c = {console, structuredClone, Promise, data:{projects:[{id:'p',name:'現場'}]}, projectId:'p', page:'measurements', uid:()=>`id${++sequence}`, today:()=> '2026-10-05', save:()=>true, esc:s=>String(s??''), intro:()=>'', alert() {}, confirm:()=>true, render() {}, document:{addEventListener(type,fn){(handlers[type]||=[]).push(fn);},querySelector(selector){if(!showOverlay)return null;return selector==='#measureOverlay'?overlay:selector==='#measureCanvas'?{width:1000,height:1000}:null;}}, window:{addEventListener(){}}};
+vm.createContext(c);vm.runInContext(fs.readFileSync(require('node:path').join(__dirname,'../assets/measurements.js'),'utf8'),c);
+const run=code=>vm.runInContext(code,c);
+c.fakeStore=async(mode,value)=>{if(mode==='read')return structuredClone(Array.from(stored.values()));if(mode==='write')stored.set(value.id,structuredClone(value));if(mode==='delete')stored.delete(value);};
+c.fakeBatch=async docs=>{for(const doc of docs)stored.set(doc.id,structuredClone(doc));};
+run("measureStore=fakeStore;measureStoreBatch=fakeBatch;disposeMeasurePdf=async()=>{};measureReady=true;measureLoaded=true;measureFolder=measureFolders()[0].id");
+function place(id,x,y) {run(`measureRowId='${id}';measureTool='point';bindMeasureDrawing(globalThis.testOverlay)`);const e={clientX:x,clientY:y,pointerId:1,target:{closest:()=>null},preventDefault(){}};overlay.onpointerdown(e);overlay.onpointerup(e);}
+c.testOverlay=overlay;
+(async()=>{
+    for(let i=0;i<3;i++)run('createStandaloneMeasure()');await run('measureSaveQueue');
+    const rows=run('measureAllRows()');assert.deepEqual(Array.from(rows,r=>r.number),[1,2,3]);assert.equal(run('measureCurrent()'),undefined);
+    assert.match(run('renderMeasurements()'),/アンカーボルト配置図/);assert.match(run('renderMeasurements()'),/新規実測/);assert.equal(run('measurementRows()'),3);
+    run("measureDocs.push({id:'pdf1',projectId:'p',folderId:measureFolder,name:'図面1.pdf',file:{},rows:[],marks:[],lastNumber:0},{id:'pdf2',projectId:'p',folderId:measureFolder,name:'図面2.pdf',file:{},rows:[],marks:[],lastNumber:0});measureDocId='pdf1'");
+    place(rows[0].id,100,200);place(rows[2].id,800,700);await run('measureSaveQueue');
+    assert.equal(run('measureCurrent().marks[0].x'),.1);assert.equal(run('measureCurrent().marks[0].rowId'),rows[0].id);assert.equal(run('measureCurrent().rows.length'),0);
+    showOverlay=true;run('drawMeasureMarks()');assert.match(overlay.innerHTML,/>1<\/text>/);assert.match(overlay.innerHTML,/>3<\/text>/);showOverlay=false;
+    run("measureDocId='pdf2'");place(rows[0].id,500,500);await run('measureSaveQueue');
+    const input=handlers.input[0];input({target:{dataset:{plateDimension:'plateWidth'},value:'600',closest:()=>({})}});input({target:{dataset:{},name:'code',value:'C1',closest:()=>({})}});await run('measureSaveQueue');
+    assert.equal(stored.get(run('measureRecordOwner().id')).rows[0].code,'C1');assert.equal(run('measureCurrent().rows.length'),0);
+    await run(`deleteMeasureRecord('${rows[0].id}')`);assert.equal(run("measureDocs.find(d=>d.id==='pdf2').marks.length"),0);assert.equal(run("measureDocs.find(d=>d.id==='pdf1').marks[0].rowId"),rows[2].id);
+    assert.equal(run(`measureRowNumber(measureAllRows().find(r=>r.id==='${rows[2].id}'))`),3);
+    run("measureDocId='pdf1';newMeasureRow(measureCurrent())");assert.equal(run('measureCurrentRow().number'),4);place(run('measureRowId'),300,300);await run('measureSaveQueue');
+    const pdfFirst=run('measureRowId');await run('removeMeasurePDF(measureCurrent())');assert.equal(run(`measureAllRows().find(r=>r.id==='${pdfFirst}').number`),4);assert.equal(run("measureDocs.find(d=>d.id==='pdf1').file"),undefined);
+    await run(`deleteMeasureRecord('${pdfFirst}')`);run('createStandaloneMeasure()');assert.equal(run('measureCurrentRow().number'),5);await run('measureSaveQueue');
+    c.restored=await c.fakeStore('read');run('measureDocs=restored');assert.equal(run('numberMeasureRecords(measureDocs).length'),0);assert.equal(run('nextMeasureNumber()'),6);
+    const old=[{projectId:'a',rows:[{id:'old1',number:1},{id:'old2'}],marks:[{rowId:'old2',x:.2}]},{projectId:'a',rows:[{id:'old3',number:1}],marks:[]},{projectId:'b',rows:[{id:'other'}],marks:[]}];c.old=old;run('numberMeasureRecords(old)');assert.equal(new Set(old.slice(0,2).flatMap(d=>d.rows.map(r=>r.number))).size,3);assert.equal(old[0].rows[0].number,1);assert.equal(old[0].marks[0].rowId,'old2');assert.equal(run('numberMeasureRecords(old).length'),0);
+    console.log('PASS: multiple PDF-free records, fixed numbers, two PDF placements, edits use original record, multi-PDF deletion, PDF-first path, PDF removal retains records, restart and legacy migration');
+})().catch(error=>{console.error(error);process.exitCode=1;});
