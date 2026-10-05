@@ -44,7 +44,7 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
  const classes={add(){},remove(){}};const item={dataset:{measureDragKind:'row',measureDragId:'r1'},textContent:'No.7',classList:classes};
  const transfer={setData(){},effectAllowed:'',dropEffect:''};
  await handlers.dragstart[0]({target:{closest:()=>item},dataTransfer:transfer,preventDefault(){}});
- assert.equal(transfer.effectAllowed,'move');
+ assert.equal(transfer.effectAllowed,'all');
  const target={dataset:{measureDropFolder:'id3'},classList:classes};let prevented=false;
  await handlers.dragover[0]({target:{closest:()=>target},dataTransfer:transfer,preventDefault(){prevented=true}});assert(prevented);
  await handlers.drop[0]({target:{closest:()=>target},preventDefault(){}});assert.equal(run("measureRecordOwner('r1').folderId"),'id3');
