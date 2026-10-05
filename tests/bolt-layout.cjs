@@ -1,0 +1,32 @@
+const fs = require('node:fs');
+const vm = require('node:vm');
+const assert = require('node:assert/strict');
+const handlers = {};
+const context = {console, structuredClone, Promise, document: {addEventListener(type, fn) {(handlers[type] ||= []).push(fn);}, querySelector() {return null;}}, window: {addEventListener() {}}, data: {measureFolders: []}, projectId: 'p1', uid: () => 'folder', save() {}, esc: String};
+vm.createContext(context);
+vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../assets/measurements.js'), 'utf8'), context);
+const run = code => vm.runInContext(code, context);
+for (let columns = 2; columns <= 20; columns++) for (let rows = 2; rows <= 20; rows++) {
+    const points = run(`measureBoltPoints({columns:${columns},rows:${rows}})`);
+    assert.equal(points.length, 2 * columns + 2 * rows - 4);
+    assert.equal(new Set(points.map(p => `${p.x},${p.y}`)).size, points.length);
+    assert(points.every(p => p.x === 70 || p.x === 250 || p.y === 70 || p.y === 250));
+}
+assert.equal(run('measureBoltLayout({}).columns'), 2);
+assert.equal(run('measureBoltLayout({boltLayout:{columns:999,rows:0}}).columns'), 20);
+assert.equal(run('measureBoltLayout({boltLayout:{columns:999,rows:0}}).rows'), 2);
+assert.equal(run("renderMeasureBoltLayout({kind:'鉄筋'})"), '');
+assert.match(run("renderMeasureBoltLayout({kind:'鉄骨',boltLayout:{columns:3,rows:3}})"), /合計 8本/);
+run("measureDocs=[{id:'d',projectId:'p1',rows:[{id:'r',kind:'鉄骨',values:[{actual:'24'}]}]}];measureDocId='d';measureRowId='r';persistMeasure=doc=>{globalThis.saved=structuredClone(doc)}");
+const button = {dataset: {boltAxis: 'columns', boltStep: '1'}, closest() {return null;}};
+const event = {target: {closest(selector) {return selector === '[data-bolt-axis]' ? button : null;}}};
+handlers.click[0](event);
+assert.equal(context.saved.rows[0].boltLayout.columns, 3);
+assert.equal(context.saved.rows[0].values[0].actual, '24');
+for (let i = 0; i < 30; i++) handlers.click[0](event);
+assert.equal(context.saved.rows[0].boltLayout.columns, 20);
+button.dataset.boltStep = '-1';
+for (let i = 0; i < 30; i++) handlers.click[0](event);
+assert.equal(context.saved.rows[0].boltLayout.columns, 2);
+assert.equal(JSON.parse(JSON.stringify(context.saved)).rows[0].boltLayout.shape, 'rectangle');
+console.log('PASS: all 361 layouts, unique perimeter bolts, defaults, limits, total, steel-only UI, edits saved without losing measurements');
