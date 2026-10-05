@@ -10,6 +10,9 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
 {id:'other',projectId:'other',folderId:'id2',rows:[{id:'foreign',number:1}],marks:[]}];measureDocId='pdf';measureRowId='r1'`);
 (async()=>{
  const html=run('renderMeasurements()');
+ assert.equal(run("measureFolderCount('id1')"),2);assert.equal(run("measureFolderPDFCount('id1')"),1);assert.equal(run("measureFolderPDFCount('all')"),1);assert.equal(run("measureFolderPDFCount('none')"),0);
+ assert(html.includes('aria-label="PDF 1件"'));assert(html.includes('measure-folder-counts'));
+ const css=fs.readFileSync(require('node:path').join(__dirname,'../assets/measurements.css'),'utf8');assert(css.includes('grid-template-columns:repeat(5,minmax(0,1fr))'));assert(css.includes('@container(max-width:420px)'));
  assert.equal((html.match(/id="measurePdfFile"/g)||[]).length,1);
  assert.equal((html.match(/data-measure-new /g)||[]).length,1);
  assert(html.indexOf('measure-top-actions')<html.indexOf('measure-folder-records'));
@@ -26,7 +29,9 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
  run("measureRowId='r1'");assert(run('renderMeasurements()').includes('measureRecordForm')); // Linked PDF can still open a moved record.
  assert.equal(await run("moveMeasureItem('pdf','pdf','id2')"),true);
  assert.equal(stored.get('pdf').folderId,'id2');assert.equal(stored.get('pdf').file.bytes,'original');assert.equal(stored.get('pdf').rows[0].number,8);assert.equal(stored.get('pdf').marks[0].x,.25);
+ assert.equal(run("measureFolderPDFCount('id1')"),0);assert.equal(run("measureFolderPDFCount('id2')"),1);
  assert.equal(await run("moveMeasureItem('pdf','pdf','none')"),true);assert.equal(stored.get('pdf').folderId,'');
+ assert.equal(run("measureFolderPDFCount('none')"),1);
  const before=run('JSON.stringify(measureDocs)');fail=true;
  assert.equal(await run("moveMeasureItem('row','r1','id3')"),false);assert.equal(run('JSON.stringify(measureDocs)'),before);fail=false;
  assert.equal(await run("moveMeasureItem('row','foreign','id1')"),false);
@@ -57,6 +62,7 @@ measureDocs=[{id:'records',projectId:'p',folderId:'id1',type:'records',rows:[{id
  const button={dataset:{measureDocDelete:'wrong'},hasAttribute:key=>key==='data-measure-doc-delete'};
  await handlers.click.find(fn=>fn.toString().includes('[data-measure-folder],[data-measure-folder-add]'))({target:{closest:()=>button}});
  assert.equal(run("measureDocs.find(d=>d.id==='wrong').type"),'records');assert.equal(run("measureDocs.find(d=>d.id==='wrong').file"),undefined);assert.equal(run('measureDocId'),'pdf');
+ assert.equal(run("measureFolderPDFCount('none')"),1); // Cancelled PDF is excluded; retained records do not count as files.
  assert.equal(run("measureDocs.find(d=>d.id==='pdf').marks[0].rowId"),'r1');
  console.log('PASS: folder/record/PDF order, shared folder drag/reorder/nesting/cycle checks, per-upload PDF cancellation, atomic record moves, numbers/XY/PDF links and save rollback');
 })().catch(e=>{console.error(e);process.exitCode=1});
