@@ -12,6 +12,8 @@ const {chromium}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/playwr
   await page.reload();await page.locator('[data-page=snapshot]').click();
   const f=page.frameLocator('#snapshotEditor');
   await f.locator('#save-status').waitFor();
+  await page.waitForFunction(()=>!!document.querySelector('#snapshotEditor')?.contentWindow.SekokanSnapshot);
+  await page.locator('#snapshotEditor').evaluate(el=>el.contentWindow.SekokanSnapshot.ready);
   await f.locator('#busy').waitFor({state:'hidden'});
   await page.locator('[data-snapshot-folder]').click();await page.locator('#snapshotFolder').selectOption('folder-a');
   assert.equal(await page.locator('[data-snapshot-photo]').count(),1);
