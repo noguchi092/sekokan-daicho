@@ -1,0 +1,42 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),vm=require('node:vm');
+const dependencyRoot=process.env.SNAPSHOT_TEST_DEPS||'/tmp/sekokan-native-dom/node_modules';
+const {parseHTML}=require(path.join(dependencyRoot,'linkedom'));
+const {indexedDB}=require(path.join(dependencyRoot,'fake-indexeddb'));
+const {document,window}=parseHTML('<html><body><main><div id="foreign"><input id="title" value="元の画面"></div><section id="snapshotHost"></section></main></body></html>');
+const root=document.querySelector('#snapshotHost');
+document.elementFromPoint=()=>root;
+window.HTMLSelectElement.prototype.add=function(option){this.append(option)};
+const pixel='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRZcAAAAASUVORK5CYII=';
+window.scrollTo=window.scrollBy=()=>{};window.open=()=>null;
+const proto=window.HTMLElement.prototype;
+proto.getContext=function(){return {drawImage(){},fillRect(){},strokeRect(){},beginPath(){},moveTo(){},lineTo(){},stroke(){},fillText(){},translate(){},rotate(){},measureText:s=>({width:String(s).length*10})}};
+proto.toDataURL=()=>pixel;proto.setPointerCapture=()=>{};proto.getBoundingClientRect=()=>({left:0,top:0,width:600,height:450});
+window.HTMLCanvasElement.prototype.getContext=proto.getContext;window.HTMLCanvasElement.prototype.toDataURL=proto.toDataURL;
+window.SVGElement.prototype.setPointerCapture=()=>{};window.SVGElement.prototype.getBoundingClientRect=proto.getBoundingClientRect;
+proto.showModal=function(){this.setAttribute('open','')};proto.close=function(){this.removeAttribute('open')};
+Object.defineProperty(window.HTMLSelectElement.prototype,'value',{configurable:true,get(){return this.querySelector('option[selected]')?.value||this.querySelector('option')?.value||''},set(v){this.querySelectorAll('option').forEach(o=>o.toggleAttribute('selected',o.value===String(v)))}});
+const warnings=[];
+const c=vm.createContext({console,document,window,indexedDB,URL,URLSearchParams,Blob,File,structuredClone,crypto:require('node:crypto').webcrypto,CSS:{escape:s=>s},location:{search:''},setTimeout,clearTimeout,requestAnimationFrame:fn=>fn(),Option:function(text,value){const o=document.createElement('option');o.value=value;o.textContent=text;return o},Image:class{constructor(){this.naturalWidth=320;this.naturalHeight=240;this.width=320;this.height=240;this.complete=true}async decode(){}},alert:m=>warnings.push(m)});
+const modules=new Map(),base=path.resolve(__dirname,'..');
+async function load(file){if(modules.has(file))return modules.get(file);let mod;
+ if(file.endsWith('/assets/pdf-crop.js'))mod=new vm.SyntheticModule(['loadPdfEngine'],function(){this.setExport('loadPdfEngine',async()=>({getDocument:()=>({promise:Promise.resolve({numPages:1,getPage:async()=>({getViewport:()=>({width:400,height:300}),render:()=>({promise:Promise.resolve()}),cleanup(){}}),async destroy(){}})})}))},{context:c});
+ else mod=new vm.SourceTextModule(fs.readFileSync(file,'utf8'),{context:c,identifier:file,initializeImportMeta(meta){meta.url='file://'+file}});
+ modules.set(file,mod);await mod.link((spec,ref)=>load(path.resolve(path.dirname(ref.identifier),spec.split('?')[0])));return mod;
+}
+async function mount(site){const mod=await load(path.join(base,'snapshot/editor.js'));if(mod.status!=='evaluated')await mod.evaluate();return mod.namespace.mountSnapshotEditor(root,{projectId:site,projectName:'現場'+site})}
+(async()=>{
+ const api=await mount('A');assert.equal(root.querySelector('iframe'),null);assert(root.querySelector('[data-snapshot-folder]'));assert(root.querySelector('#pdf-input'));assert(root.querySelector('#photos-input'));assert.equal(document.querySelector('#foreign #title').value,'元の画面');assert.equal(root.querySelector('#project').value,'現場A');
+ const file=new File(['photo'],'test.png',{type:'image/png'});file.sekokanPhotoId='original-1';await api.importPhotos([file]);assert.equal(root.querySelectorAll('.thumb').length,1);assert.equal(root.querySelectorAll('textarea.comment').length,1);
+ const comment=root.querySelector('textarea.comment');comment.value='ネイティブの指示内容';comment.oninput({target:comment});await api.flush();
+ assert.equal(root.querySelector('#comment-rows').textContent.includes('ネイティブの指示内容'),true);
+ const pdfInput=root.querySelector('#pdf-input');Object.defineProperty(pdfInput,'files',{value:[new File(['pdf'],'plan.pdf',{type:'application/pdf'})]});pdfInput.onchange({target:pdfInput});await api.flush();assert.equal(root.querySelectorAll('.drawing-stage').length,1);
+ root.querySelector('[data-tool=number]').onclick();const svg=root.querySelector('.drawing-stage svg'),event=new window.Event('pointerdown',{bubbles:true,cancelable:true});Object.assign(event,{button:0,pointerId:1,clientX:100,clientY:80});svg.dispatchEvent(event);await api.flush();assert.equal(root.querySelectorAll('.drawing-stage svg circle').length,1);
+ let appClicks=0;document.addEventListener('click',()=>appClicks++);
+ root.querySelector('#tab-photos').onclick();root.querySelector('.thumb [data-action=edit]').click();assert(root.querySelector('.photo-editor').hasAttribute('open'));assert.equal(appClicks,0);root.querySelector('#photo-cancel').onclick();assert(!root.querySelector('.photo-editor').hasAttribute('open'));
+ root.querySelector('[data-snapshot-folder]').click();assert.equal(appClicks,1);
+ api.dispose();assert.equal(root.children.length,0);
+ const again=await mount('A');assert.equal(root.querySelectorAll('.thumb').length,1);assert.equal(root.querySelector('textarea.comment').value,'ネイティブの指示内容');assert.equal(document.querySelector('#foreign #title').value,'元の画面');again.dispose();
+ const b=await mount('B');assert.equal(root.querySelectorAll('.thumb').length,0);assert.equal(root.querySelector('#project').value,'現場B');await b.flush();b.dispose();
+ const source=fs.readFileSync(path.join(base,'assets/snapshot.js'),'utf8');assert(!source.includes('createElement(\'iframe\')'));assert(source.includes('mountSnapshotEditor'));assert(source.includes('snapshotAPI?.dispose()'));
+ console.log('PASS: native same-document editor, source-folder/upload/PDF tools, scoped selectors, actual photo import/comment rendering, disposal, old workspace restore and project isolation');
+})().catch(e=>{console.error(e);process.exitCode=1});

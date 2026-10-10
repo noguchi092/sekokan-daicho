@@ -1,25 +1,38 @@
-/* Integrate the existing Snapshot editor without touching source photos. */
-let snapshotFrameProject='',snapshotHydration=0,snapshotPickerFolder='all',snapshotPickAnchor='';
+/* Native Snapshot integration. No iframe or separate editor page. */
+let snapshotActiveProject='',snapshotHydration=0,snapshotPickerFolder='all',snapshotPickAnchor='',snapshotAPI=null,snapshotMounting=null,snapshotWide=true;
 const snapshotPicked=new Set();
 function renderSnapshot(){
   const project=data.projects.find(p=>p.id===projectId);
-  return intro('SNAPSHOT','スナップショット',project?.name||'現場を選択してください')+`<section class="card snapshot-entry"><div><span class="badge">有料版機能</span><p>写真を並べて指示内容を記入し、図面に写真番号を配置できます。作業内容は現場ごとにこの端末に保存します。</p></div><div class="intro-actions"><button class="btn" data-snapshot-folder ${!projectId?'disabled':''}>写真管理フォルダーから読み込む</button><button class="btn secondary" data-snapshot-upload ${!projectId?'disabled':''}>写真をアップロード</button></div></section>`;
+  return intro('SNAPSHOT','スナップショット',project?.name||'現場を選択してください')+`<section class="snapshot-native-intro"><span class="badge">有料版機能</span><span>写真・図面・指示内容を現場ごとに保存します。元の工事写真は変更しません。</span><button class="btn secondary" data-snapshot-wide>${snapshotWide?'台帳メニューを表示':'作業画面を広げる'}</button></section>`;
+}
+let snapshotDependencies;
+function loadSnapshotDependencies(){
+  return snapshotDependencies ||= Promise.all(['jszip.min.js','pdf-lib.min.js'].map(name=>new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=new URL('snapshot/vendor/'+name,location.href).href;script.onload=resolve;script.onerror=()=>reject(Error('出力機能を読み込めません。通信環境を確認してください'));document.head.append(script);
+  }))).catch(error=>{snapshotDependencies=null;throw error});
 }
 async function hydrateSnapshot(){
   let host=$('#snapshotHost');if(!host){host=document.createElement('section');host.id='snapshotHost';host.hidden=true;document.querySelector('main').append(host)}
-  host.hidden=page!=='snapshot'||!projectId;
-  if(host.hidden)return;
+  document.body.classList.toggle('snapshot-wide',page==='snapshot'&&snapshotWide);
+  document.body.classList.toggle('snapshot-page',page==='snapshot');
+  host.hidden=page!=='snapshot'||!projectId;if(host.hidden){host.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());return}
   const site=projectId,token=++snapshotHydration;
-  if(snapshotFrameProject===site&&host.querySelector('iframe'))return;
-  const previous=host.querySelector('iframe');
-  if(previous){try{await previous.contentWindow.SekokanSnapshot?.flush()}catch{alert('スナップショットを保存できませんでした。元の現場に戻ります。再保存してください。');projectId=snapshotFrameProject;render();return}}
-  if(token!==snapshotHydration||page!=='snapshot'||site!==projectId)return;
-  snapshotFrameProject=site;
-  const frame=document.createElement('iframe');frame.id='snapshotEditor';frame.title='スナップショット 写真指示書の編集';
-  const url=new URL('snapshot/index.html',location.href);url.searchParams.set('projectId',site);url.searchParams.set('projectName',data.projects.find(p=>p.id===site)?.name||'');url.searchParams.set('v','20261009-integration');frame.src=url.href;
-  host.replaceChildren(frame);
+  if(snapshotActiveProject===site&&(snapshotAPI||snapshotMounting))return;
+  if(snapshotMounting){try{await snapshotMounting}catch{}}
+  if(token!==snapshotHydration||site!==projectId||page!=='snapshot')return;
+  if(snapshotAPI){try{await snapshotAPI.flush()}catch{alert('スナップショットを保存できませんでした。元の現場に戻ります。再保存してください。');projectId=snapshotActiveProject;render();return}}
+  if(token!==snapshotHydration||site!==projectId||page!=='snapshot')return;
+  snapshotAPI?.dispose();snapshotAPI=null;snapshotActiveProject=site;
+  host.innerHTML='<p class="snapshot-loading" role="status">写真・図面の編集機能を読み込み中…</p>';
+  snapshotMounting=(async()=>{
+    await loadSnapshotDependencies();
+    const {mountSnapshotEditor}=await import(new URL('snapshot/editor.js?v=20261010-native',location.href).href);
+    snapshotAPI=await mountSnapshotEditor(host,{projectId:site,projectName:data.projects.find(p=>p.id===site)?.name||''});
+    return snapshotAPI;
+  })();
+  try{await snapshotMounting}catch(error){snapshotActiveProject='';host.innerHTML=`<p class="snapshot-loading" role="alert">${esc(error.message||'編集機能を読み込めませんでした。再読み込みしてください')}</p>`;throw error}finally{snapshotMounting=null}
 }
-function snapshotEditor(){const frame=$('#snapshotEditor');if(snapshotFrameProject!==projectId||!frame?.contentWindow.SekokanSnapshot){alert('編集画面を読み込んでいます。少し待ってから操作してください。');return null}return frame.contentWindow.SekokanSnapshot}
+function snapshotEditor(){if(snapshotActiveProject!==projectId||!snapshotAPI){alert('編集画面を読み込んでいます。少し待ってから操作してください。');return null}return snapshotAPI}
 function snapshotFolderPhotos(){return items('photos').filter(p=>snapshotPickerFolder==='all'||(snapshotPickerFolder==='none'?!p.folderId:isInFolder(p.folderId,snapshotPickerFolder)))}
 function snapshotPicker(){
   let dialog=$('#snapshotPhotoPicker');if(!dialog){dialog=document.createElement('dialog');dialog.id='snapshotPhotoPicker';dialog.className='snapshot-picker';dialog.setAttribute('aria-label','写真管理から読み込む');document.body.append(dialog)}
@@ -34,7 +47,7 @@ async function importSnapshotPhotos(){
   const site=projectId,photos=snapshotFolderPhotos().filter(p=>snapshotPicked.has(p.id)),withBoard=$('#snapshotUseBoard').checked,button=$('[data-snapshot-import]'),status=$('#snapshotImportStatus');button.disabled=true;
   const files=[];let errors=0;
   try{for(const [i,photo]of photos.entries()){status.textContent=`写真を準備中 ${i+1} / ${photos.length}`;try{const blob=withBoard?(await getCompositePhoto(photo)||await photoDownloadBlob(photo)):await(await fetch(photo.image)).blob();const file=new File([blob],`${photo.date||'写真'}_${photo.title||photo.boardName||i+1}.jpg`,{type:blob.type||'image/jpeg'});file.sekokanPhotoId=photo.id;files.push(file)}catch{errors++}}
-    if(site!==projectId||snapshotFrameProject!==site)throw Error('現場が切り替わったため読み込みを中止しました');
+    if(site!==projectId||snapshotActiveProject!==site)throw Error('現場が切り替わったため読み込みを中止しました');
     if(!files.length)throw Error('写真を読み込めませんでした。写真管理で元の写真を確認してください');
     await editor.importPhotos(files);$('#snapshotPhotoPicker').close();snapshotPicked.clear();if(errors)alert(`${errors}枚は読み込めませんでした。その他の写真は追加しました。`);
   }catch(error){status.textContent=error.message||'読み込みに失敗しました';button.disabled=false}
@@ -50,3 +63,4 @@ document.addEventListener('click',e=>{
   else {const id=el.dataset.snapshotPhoto,photos=snapshotFolderPhotos(),index=photos.findIndex(p=>p.id===id),anchor=photos.findIndex(p=>p.id===snapshotPickAnchor),checked=el.checked;if(e.shiftKey&&anchor>=0)photos.slice(Math.min(index,anchor),Math.max(index,anchor)+1).forEach(p=>checked?snapshotPicked.add(p.id):snapshotPicked.delete(p.id));else checked?snapshotPicked.add(id):snapshotPicked.delete(id);snapshotPickAnchor=id;refreshSnapshotPicked()}
 });
 document.addEventListener('change',e=>{if(e.target.id==='snapshotFolder'){snapshotPickerFolder=e.target.value;snapshotPicked.clear();snapshotPickAnchor='';snapshotPicker()}});
+document.addEventListener('click',e=>{if(page!=='snapshot'||!e.target.closest('[data-snapshot-wide],#menu'))return;e.preventDefault();e.stopImmediatePropagation();snapshotWide=!snapshotWide;document.querySelector('.sidebar')?.classList.toggle('open',!snapshotWide);render()},true);

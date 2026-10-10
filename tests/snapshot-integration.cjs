@@ -10,10 +10,10 @@ const {chromium}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/playwr
     localStorage.setItem('genba-note-v1',JSON.stringify({projects:[{id:'test-a',name:'現場A'},{id:'test-b',name:'現場B'}],tasks:[],schedule:[],photos:[{id:'photo-a',projectId:'test-a',folderId:'folder-a',title:'鉄骨写真',date:'2026-10-09',image},{id:'photo-b',projectId:'test-a',folderId:'folder-b',title:'配管写真',image},{id:'foreign',projectId:'test-b',image}],photoFolders:[{id:'folder-a',projectId:'test-a',name:'鉄骨'},{id:'folder-b',projectId:'test-a',name:'配管'}],photoFolderVersion:{'test-a':1,'test-b':1},boardLayoutVersion:{'test-a':4,'test-b':4}}));
   });
   await page.reload();await page.locator('[data-page=snapshot]').click();
-  const f=page.frameLocator('#snapshotEditor');
+  const f=page.locator('#snapshotHost');
   await f.locator('#save-status').waitFor();
-  await page.waitForFunction(()=>!!document.querySelector('#snapshotEditor')?.contentWindow.SekokanSnapshot);
-  await page.locator('#snapshotEditor').evaluate(el=>el.contentWindow.SekokanSnapshot.ready);
+  await page.waitForFunction(()=>!!snapshotAPI&&snapshotActiveProject==='test-a');
+  assert.equal(await page.locator('#snapshotHost iframe').count(),0);
   await f.locator('#busy').waitFor({state:'hidden'});
   await page.locator('[data-snapshot-folder]').click();await page.locator('#snapshotFolder').selectOption('folder-a');
   assert.equal(await page.locator('[data-snapshot-photo]').count(),1);
@@ -26,7 +26,7 @@ const {chromium}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/playwr
   await f.locator('#photos-input').setInputFiles({name:'直接アップロード.png',mimeType:'image/png',buffer:Buffer.from(png,'base64')});
   await f.locator('.thumb').nth(1).waitFor();
   await f.locator('#save-workspace').click();
-  const pdf=await page.locator('#snapshotEditor').evaluate(async el=>{const w=el.contentWindow,doc=await w.PDFLib.PDFDocument.create();const p=doc.addPage([400,300]);p.drawText('Snapshot integration test');return Array.from(await doc.save())});
+  const pdf=await page.evaluate(async()=>{const doc=await PDFLib.PDFDocument.create();const p=doc.addPage([400,300]);p.drawText('Snapshot integration test');return Array.from(await doc.save())});
   await f.locator('#pdf-input').setInputFiles({name:'図面.pdf',mimeType:'application/pdf',buffer:Buffer.from(pdf)});
   await f.locator('.drawing-stage').waitFor();await f.locator('[data-tool=number]').click();await f.locator('.drawing-stage svg').click({position:{x:110,y:95}});
   await f.locator('#save-workspace').click();await f.locator('#save-status').filter({hasText:'この端末に保存しました'}).waitFor();
@@ -41,7 +41,7 @@ const {chromium}=require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/playwr
   const [pdfDownload]=await Promise.all([page.waitForEvent('download'),f.locator('#pdf-export').click()]);assert.match(pdfDownload.suggestedFilename(),/\.pdf$/);
   const [excelDownload]=await Promise.all([page.waitForEvent('download'),f.locator('#excel-export').click()]);assert.match(excelDownload.suggestedFilename(),/\.xlsx$/);
   await page.locator('#projectSelect').selectOption('test-b');await f.locator('#busy').waitFor({state:'hidden'});await f.locator('#project').filter({}).waitFor();
-  await page.waitForFunction(()=>document.querySelector('#snapshotEditor').contentDocument?.querySelector('#project')?.value==='現場B');
+  await page.waitForFunction(()=>document.querySelector('#snapshotHost #project')?.value==='現場B');
   assert.equal(await f.locator('.thumb').count(),0);
   await page.locator('#projectSelect').selectOption('test-a');await f.locator('.thumb').nth(1).waitFor();
   assert.equal(await f.locator('textarea.comment').first().inputValue(),'アンカーボルトを確認');

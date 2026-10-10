@@ -1,6 +1,6 @@
 /* Saved editor state is project-scoped. DOM images/canvases are revived on load. */
-export function setupSavedWorkspace({state,meta,render,switchView,setPaperLayout,addPhotos,toast}) {
-  const params=new URLSearchParams(location.search),projectId=params.get('projectId');
+export function setupSavedWorkspace({state,meta,render,switchView,setPaperLayout,addPhotos,toast,document=globalThis.document,window=globalThis.window,projectId:siteId,projectName,expose=true}) {
+  const params=new URLSearchParams(location.search),projectId=siteId||params.get('projectId');
   if(!projectId)throw Error('セコカン台帳で現場を選択して開いてください');
   const key='project:'+projectId,cache=new WeakMap();let ready=false,pending=0,failed=false,queue=Promise.resolve(),inputTimer;
   const status=document.querySelector('#save-status');
@@ -18,12 +18,13 @@ export function setupSavedWorkspace({state,meta,render,switchView,setPaperLayout
       state.photos=photos;state.drawings=drawings;Object.assign(state,record.settings);state.selected=null;
       for(const [id,value]of Object.entries(record.meta||{})){const el=document.getElementById(id);if(el)el.value=value}
       setPaperLayout(state.paperSize,state.orientation);document.querySelector('#photos-per-page').value=String(state.photosPerPage);switchView(state.view);render();
-    }else{document.querySelector('#project').value=params.get('projectName')||'';render()}
+    }else{document.querySelector('#project').value=projectName??params.get('projectName')??'';render()}
     ready=true;label(record?'保存した作業を読み込みました':'写真を追加すると自動保存します');
   }
   const initialized=restore().catch(error=>{toast(error.message||'作業を開けませんでした');throw error});
   const api={ready:initialized,schedule,async flush(){await initialized;clearTimeout(inputTimer);inputTimer=null;schedule();await queue;if(failed)throw Error('スナップショットを保存できませんでした。再保存してください')},async importPhotos(files){await initialized;await addPhotos(files);await api.flush()},upload(){if(!ready){toast('保存した作業の読み込みを待ってください');return}document.querySelector('#photos-input').click()}};
-  window.SekokanSnapshot=api;
+  api.dispose=()=>{clearTimeout(inputTimer);inputTimer=null;ready=false};
+  if(expose)window.SekokanSnapshot=api;
   document.querySelector('#save-workspace').onclick=()=>api.flush().catch(error=>toast(error.message));
   document.addEventListener('input',e=>{if(!ready||e.target.closest('.photo-editor'))return;clearTimeout(inputTimer);inputTimer=setTimeout(()=>{inputTimer=null;schedule()},200)});
   document.addEventListener('change',e=>{if(ready&&!e.target.closest('.photo-editor'))schedule()});
